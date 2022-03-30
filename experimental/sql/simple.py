@@ -22,6 +22,7 @@ table = connection.table('t')
 
 # Define the query.
 query = table.filter(table['a'] == 'AS')
+print('Pandas AST: ' + '-' * 60)
 print(query)
 
 # Define an xDSL printer (xdsl needs a Printer class to print since printing requires keeping state).
@@ -33,9 +34,11 @@ ctx = MLContext()
 # Translate the query to the xDSL mirrored dialect.
 xdsl_query = ibis_to_xdsl(ctx, query)
 xdsl_query.verify()
+print('Ibis dialect: ' + '-' * 60)
 p.print_op(xdsl_query)
 
 # Rewriter the query to the relational dialect.
 ibis_dialect_to_relational(ctx, xdsl_query)
 
+print('Relational dialect: ' + '-' * 60)
 p.print_op(xdsl_query)
