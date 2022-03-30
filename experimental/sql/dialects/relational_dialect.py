@@ -138,5 +138,5 @@ class Relational:
     self.ctx.register_attr(String)
 
     self.ctx.register_op(Selection)
-    self.ctx.register_op(AlchemyTable)
+    self.ctx.register_op(PandasTable)
     self.ctx.register_op(SchemaElement)
