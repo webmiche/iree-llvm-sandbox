@@ -85,7 +85,8 @@ class SchemaElement(Operation):
   name: str = "rel.schema_element"
 
   elt_name = AttributeDef(StringAttr)
-  elt_type = AttributeDef(DataType())
+  #TODO: Why can't I used `DataType()` here?
+  elt_type = AttributeDef(AnyAttr())
 
   @staticmethod
   def get(name: str, type: DataType):

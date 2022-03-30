@@ -127,7 +127,8 @@ class SchemaElement(Operation):
   name: str = "ibis.schema_element"
 
   elt_name = AttributeDef(StringAttr)
-  elt_type = AttributeDef(DataType())
+  # TODO: why does `DataType()` not work here
+  elt_type = AttributeDef(AnyAttr())
 
   @staticmethod
   def get(name: str, type: DataType):
@@ -142,7 +143,8 @@ class Literal(Operation):
   name: str = "ibis.literal"
 
   val = AttributeDef(AnyAttr())
-  type = AttributeDef(DataType())
+  # TODO: why does `DataType()` not work here
+  type = AttributeDef(AnyAttr())
 
   result = ResultDef(AnyAttr())
 

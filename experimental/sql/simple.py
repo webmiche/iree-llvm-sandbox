@@ -32,6 +32,7 @@ ctx = MLContext()
 
 # Translate the query to the xDSL mirrored dialect.
 xdsl_query = ibis_to_xdsl(ctx, query)
+xdsl_query.verify()
 p.print_op(xdsl_query)
 
 # Rewriter the query to the relational dialect.

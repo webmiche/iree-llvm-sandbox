@@ -22,3 +22,20 @@ This prints three representations of the query `table.filter(table['a'] == 'AS')
 - the ibis representation
 - the same representation mirrored in xDSL
 - the query in the relational dialect
+
+## Execute filecheck tests
+
+First, add your current folder to the PYTHONPATH environment variable.
+
+```
+pwd
+
+export PYTHONPATH=$PYHTONPATH:*output_of_above_command*
+
+```
+
+Then run:
+
+```
+lit tests/
+```
