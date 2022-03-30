@@ -13,126 +13,125 @@ from xdsl.irdl import AttributeDef, OperandDef, ResultDef, RegionDef, SingleBloc
 
 @irdl_attr_definition
 class DataType(ParametrizedAttribute):
-    name: str = "rel.datatype"
+  name: str = "rel.datatype"
 
 
 @irdl_attr_definition
 class int32(DataType):
-    name: str = "rel.int32"
+  name: str = "rel.int32"
 
 
 @irdl_attr_definition
 class String(DataType):
-    name: str = "rel.String"
+  name: str = "rel.String"
 
 
 @irdl_attr_definition
 class float64(DataType):
-    name: str = "rel.float64"
+  name: str = "rel.float64"
 
 
 @irdl_attr_definition
 class Bag(ParametrizedAttribute):
-    name: str = "rel.bag"
+  name: str = "rel.bag"
 
 
 @irdl_attr_definition
 class Column(ParametrizedAttribute):
-    name: str = "rel.column"
+  name: str = "rel.column"
 
 
 @irdl_op_definition
 class Equals(Operation):
-    name: str = "rel.equals"
+  name: str = "rel.equals"
 
-    table = OperandDef(Bag())
-    column = AttributeDef(StringAttr)
-    comparator = OperandDef(AnyAttr())
+  table = OperandDef(Bag())
+  column = AttributeDef(StringAttr)
+  comparator = OperandDef(AnyAttr())
 
-    result = ResultDef(Column())
+  result = ResultDef(Column())
 
-    @staticmethod
-    @builder
-    def get(table: Operation, column: StringAttr,
-            comparator: Operation) -> 'Equals':
-        return Equals.build(operands=[table, comparator],
-                            attributes={"column": column},
-                            result_types=[Column()])
+  @staticmethod
+  @builder
+  def get(table: Operation, column: StringAttr,
+          comparator: Operation) -> 'Equals':
+    return Equals.build(operands=[table, comparator],
+                        attributes={"column": column},
+                        result_types=[Column()])
 
 
 @irdl_op_definition
 class AlchemyTable(Operation):
-    name: str = "rel.alchemy_table"
+  name: str = "rel.alchemy_table"
 
-    table_name = AttributeDef(StringAttr)
-    schema = SingleBlockRegionDef()
-    result = ResultDef(Bag())
+  table_name = AttributeDef(StringAttr)
+  schema = SingleBlockRegionDef()
+  result = ResultDef(Bag())
 
-    @staticmethod
-    @builder
-    def get(name: str, Schema: Region,
-            result_type: Attribute) -> 'AlchemyTable':
-        return AlchemyTable.build(
-            attributes={"table_name": StringAttr.from_str(name)},
-            regions=[Schema],
-            result_types=[result_type])
+  @staticmethod
+  @builder
+  def get(name: str, Schema: Region, result_type: Attribute) -> 'AlchemyTable':
+    return AlchemyTable.build(
+        attributes={"table_name": StringAttr.from_str(name)},
+        regions=[Schema],
+        result_types=[result_type])
 
 
 @irdl_op_definition
 class SchemaElement(Operation):
-    name: str = "rel.schema_element"
+  name: str = "rel.schema_element"
 
-    elt_name = AttributeDef(StringAttr)
-    elt_type = AttributeDef(DataType())
+  elt_name = AttributeDef(StringAttr)
+  elt_type = AttributeDef(DataType())
 
-    @staticmethod
-    def get(name: str, type: DataType):
-        return SchemaElement.build(attributes={
-            "elt_name": StringAttr.from_str(name),
-            "elt_type": type
-        })
+  @staticmethod
+  def get(name: str, type: DataType):
+    return SchemaElement.build(attributes={
+        "elt_name": StringAttr.from_str(name),
+        "elt_type": type
+    })
 
 
 @irdl_op_definition
 class Selection(Operation):
-    name: str = "rel.selection"
+  name: str = "rel.selection"
 
-    parent_ = OperandDef(Bag())
-    predicates = SingleBlockRegionDef()
+  parent_ = OperandDef(Bag())
+  predicates = SingleBlockRegionDef()
 
-    result = ResultDef(Bag())
+  result = ResultDef(Bag())
 
-    @builder
-    @staticmethod
-    def get(table: Operation, predicates: Region) -> 'Selection':
-        return Selection.build(operands=[table],
-                               regions=[predicates],
-                               result_types=[Bag()])
+  @builder
+  @staticmethod
+  def get(table: Operation, predicates: Region) -> 'Selection':
+    return Selection.build(operands=[table],
+                           regions=[predicates],
+                           result_types=[Bag()])
 
 
 @irdl_op_definition
 class Yield(Operation):
-    name: str = "rel.Yield"
+  name: str = "rel.Yield"
 
-    ops = VarOperandDef(AnyAttr())
+  ops = VarOperandDef(AnyAttr())
 
-    @staticmethod
-    @builder
-    def get(ops: list[Operation]) -> 'Yield':
-        return Yield.build(operands=[ops])
+  @staticmethod
+  @builder
+  def get(ops: list[Operation]) -> 'Yield':
+    return Yield.build(operands=[ops])
 
 
 @dataclass
 class Relational:
-    ctx: MLContext
+  ctx: MLContext
 
-    def __post_init__(self: 'Relational'):
-        self.ctx.register_attr(Bag)
-        self.ctx.register_attr(DataType)
-        self.ctx.register_attr(int32)
-        self.ctx.register_attr(float64)
-        self.ctx.register_attr(String)
+  def __post_init__(self: 'Relational'):
+    self.ctx.register_attr(Bag)
+    self.ctx.register_attr(DataType)
+    self.ctx.register_attr(int32)
+    self.ctx.register_attr(float64)
+    self.ctx.register_attr(String)
 
-        self.ctx.register_op(Selection)
-        self.ctx.register_op(AlchemyTable)
-        self.ctx.register_op(SchemaElement)
+    self.ctx.register_op(Selection)
+    self.ctx.register_op(AlchemyTable)
+    self.ctx.register_op(SchemaElement)

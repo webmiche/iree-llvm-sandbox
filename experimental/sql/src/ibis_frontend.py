@@ -24,93 +24,90 @@ import dialects.ibis_dialect as id
 
 @dataclass
 class NodeVisitor:
-    ctx: MLContext
+  ctx: MLContext
 
-    def visit(self, node: ibis.expr.types.Expr) -> List[Operation]:
-        if isinstance(node, ibis.expr.types.TableExpr):
-            return self.visit_TableExpr(node)
-        if isinstance(node, ibis.expr.types.StringColumn):
-            return self.visit_StringColumn(node)
-        if isinstance(node, ibis.expr.types.BooleanColumn):
-            return self.visit_BooleanColumn(node)
-        if isinstance(node, ibis.expr.types.StringScalar):
-            return self.visit_StringScalar(node)
-        raise KeyError(f"Unknown nodetype {type(node)}")
+  def visit(self, node: ibis.expr.types.Expr) -> List[Operation]:
+    if isinstance(node, ibis.expr.types.TableExpr):
+      return self.visit_TableExpr(node)
+    if isinstance(node, ibis.expr.types.StringColumn):
+      return self.visit_StringColumn(node)
+    if isinstance(node, ibis.expr.types.BooleanColumn):
+      return self.visit_BooleanColumn(node)
+    if isinstance(node, ibis.expr.types.StringScalar):
+      return self.visit_StringScalar(node)
+    raise KeyError(f"Unknown nodetype {type(node)}")
 
-    def convert_datatype(self, type_: ibis.expr.datatypes) -> id.DataType:
-        if isinstance(type_, ibis.expr.datatypes.String):
-            return id.String()
-        if isinstance(type_, ibis.expr.datatypes.Int32):
-            return id.int32()
-        if isinstance(type_, ibis.expr.datatypes.Float64):
-            return id.float64()
-        raise KeyError(f"Unknown datatype: {type(type_)}")
+  def convert_datatype(self, type_: ibis.expr.datatypes) -> id.DataType:
+    if isinstance(type_, ibis.expr.datatypes.String):
+      return id.String()
+    if isinstance(type_, ibis.expr.datatypes.Int32):
+      return id.int32()
+    if isinstance(type_, ibis.expr.datatypes.Float64):
+      return id.float64()
+    raise KeyError(f"Unknown datatype: {type(type_)}")
 
-    def visit_Schema(self, schema: ibis.expr.schema.Schema) -> Region:
-        ops = []
-        for n, t in zip(schema.names, schema.types):
-            ops.append(id.SchemaElement.get(n, self.convert_datatype(t)))
-        return Region.from_operation_list(ops)
+  def visit_Schema(self, schema: ibis.expr.schema.Schema) -> Region:
+    ops = []
+    for n, t in zip(schema.names, schema.types):
+      ops.append(id.SchemaElement.get(n, self.convert_datatype(t)))
+    return Region.from_operation_list(ops)
 
-    def visit_TableExpr(self,
-                        table: ibis.expr.types.TableExpr) -> List[Operation]:
-        op = table.op()
-        if isinstance(op, AT):
-            schema = self.visit_Schema(op.schema)
-            new_op = id.AlchemyTable.get(op.name, schema)
-            yield_op = id.Yield.get([new_op])
-            return [new_op, yield_op]
-        if isinstance(op, rels.Selection):
-            table = Region.from_operation_list(self.visit(op.table))
-            # TODO: handle mulitple predicates
-            predicates = Region.from_operation_list(self.visit(
-                op.predicates[0]))
-            new_op = id.Selection.get(table, predicates)
-            yield_op = id.Yield.get([new_op])
-            return [new_op, yield_op]
-        raise KeyError(f"Unknown tableExpr: {type(op)}")
+  def visit_TableExpr(self,
+                      table: ibis.expr.types.TableExpr) -> List[Operation]:
+    op = table.op()
+    if isinstance(op, AT):
+      schema = self.visit_Schema(op.schema)
+      new_op = id.AlchemyTable.get(op.name, schema)
+      yield_op = id.Yield.get([new_op])
+      return [new_op, yield_op]
+    if isinstance(op, rels.Selection):
+      table = Region.from_operation_list(self.visit(op.table))
+      # TODO: handle mulitple predicates
+      predicates = Region.from_operation_list(self.visit(op.predicates[0]))
+      new_op = id.Selection.get(table, predicates)
+      yield_op = id.Yield.get([new_op])
+      return [new_op, yield_op]
+    raise KeyError(f"Unknown tableExpr: {type(op)}")
 
-    def visit_StringColumn(
-            self,
-            stringColumn: ibis.expr.types.StringColumn) -> List[Operation]:
-        op = stringColumn.op()
-        if isinstance(op, gen_types.TableColumn):
-            table = Region.from_operation_list(self.visit(op.table))
-            new_op = id.TableColumn.get(table, op.name, id.StringColumn())
-            yield_op = id.Yield.get([new_op])
-            return [new_op, yield_op]
-        raise Exception(f"Unknown stringcolumn: {type(op)}")
+  def visit_StringColumn(
+      self, stringColumn: ibis.expr.types.StringColumn) -> List[Operation]:
+    op = stringColumn.op()
+    if isinstance(op, gen_types.TableColumn):
+      table = Region.from_operation_list(self.visit(op.table))
+      new_op = id.TableColumn.get(table, op.name, id.StringColumn())
+      yield_op = id.Yield.get([new_op])
+      return [new_op, yield_op]
+    raise Exception(f"Unknown stringcolumn: {type(op)}")
 
-    def visit_BooleanColumn(
-            self,
-            stringColumn: ibis.expr.types.BooleanColumn) -> List[Operation]:
-        op = stringColumn.op()
-        if isinstance(op, gen_types.TableColumn):
-            reg = Region.from_operation_list(self.visit(op.table))
-            return [
-                id.TableColumn.build(
-                    attributes={"col_name": StringAttr.from_str(op.name)},
-                    regions=[reg])
-            ]
-        if isinstance(op, EQ):
-            left_reg = Region.from_operation_list(self.visit(op.left))
-            right_reg = Region.from_operation_list(self.visit(op.right))
-            new_op = id.Equals.get(left_reg, right_reg)
-            yield_op = id.Yield.get([new_op])
-            return [new_op, yield_op]
-        raise Exception(f"Unknown booleancolumn: {type(op)}")
+  def visit_BooleanColumn(
+      self, stringColumn: ibis.expr.types.BooleanColumn) -> List[Operation]:
+    op = stringColumn.op()
+    if isinstance(op, gen_types.TableColumn):
+      reg = Region.from_operation_list(self.visit(op.table))
+      return [
+          id.TableColumn.build(
+              attributes={"col_name": StringAttr.from_str(op.name)},
+              regions=[reg])
+      ]
+    if isinstance(op, EQ):
+      left_reg = Region.from_operation_list(self.visit(op.left))
+      right_reg = Region.from_operation_list(self.visit(op.right))
+      new_op = id.Equals.get(left_reg, right_reg)
+      yield_op = id.Yield.get([new_op])
+      return [new_op, yield_op]
+    raise Exception(f"Unknown booleancolumn: {type(op)}")
 
-    def visit_StringScalar(
-            self, strScalar: ibis.expr.types.StringScalar) -> List[Operation]:
-        op = strScalar.op()
-        if isinstance(op, gen_types.Literal):
-            new_op = id.Literal.get(StringAttr.from_str(op.value),
-                                    self.convert_datatype(op.dtype))
-            yield_op = id.Yield.get([new_op])
-            return [new_op, yield_op]
-        raise Exception(f"Unknown stringscalar: {type(op)}")
+  def visit_StringScalar(
+      self, strScalar: ibis.expr.types.StringScalar) -> List[Operation]:
+    op = strScalar.op()
+    if isinstance(op, gen_types.Literal):
+      new_op = id.Literal.get(StringAttr.from_str(op.value),
+                              self.convert_datatype(op.dtype))
+      yield_op = id.Yield.get([new_op])
+      return [new_op, yield_op]
+    raise Exception(f"Unknown stringscalar: {type(op)}")
 
 
 def ibis_to_xdsl(ctx: MLContext, query: ibis.expr.types.Expr) -> ModuleOp:
-    return ModuleOp.build(
-        regions=[Region.from_operation_list(NodeVisitor(ctx).visit(query))])
+  return ModuleOp.build(
+      regions=[Region.from_operation_list(NodeVisitor(ctx).visit(query))])
