@@ -6,19 +6,22 @@ import lit.formats
 import os
 
 config.name = "Relation"
-config.test_format = lit.formats.ShTest()
+config.test_format = lit.formats.ShTest(execute_external=True)
 config.suffixes = ['.ibis']
 
 config.test_source_root = os.path.dirname(__file__)
 
 if "PYTHONPATH" in os.environ.keys():
-    config.environment["PYTHONPATH"] = config.test_source_root + "/../:" + os.environ["PYTHONPATH"]
+  config.environment[
+      "PYTHONPATH"] = config.test_source_root + "/../:" + os.environ[
+          "PYTHONPATH"]
 else:
-    config.environment["PYTHONPATH"] = config.test_source_root + "/../"
+  config.environment["PYTHONPATH"] = config.test_source_root + "/../"
 
-config.environment["PATH"] = config.test_source_root + "/../tools/:" + os.environ["PATH"]
+config.environment[
+    "PATH"] = config.test_source_root + "/../tools/:" + os.environ["PATH"]
 
 config.available_features = []
 
 if sys.version_info[0] == 3 and sys.version_info[1] == 8:
-    config.available_features.append('python38')
+  config.available_features.append('python38')
