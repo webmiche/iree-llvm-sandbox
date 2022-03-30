@@ -13,6 +13,15 @@ from xdsl.pattern_rewriter import RewritePattern, GreedyRewritePatternApplier, P
 import dialects.ibis_dialect as id
 import dialects.relational_dialect as rel
 
+# This file contains the translation from the ibis_dialect to
+# the relational dialect. As both live within xDSL, I am applying
+# the RewriteEngine definedby xDSL. Simply put, there is (line 86) a
+# RewriterWalker that takes a GreedyRewriteApplier that takes a list
+# of RewritePatterns. Each RewritePattern defines a match_and_rewrite
+# function. The rewrite functions I apply here are defined on the type
+# defined in the function declaration. The Patterns are applied to each
+# Node.
+
 
 @dataclass
 class TableRewriter(RewritePattern):

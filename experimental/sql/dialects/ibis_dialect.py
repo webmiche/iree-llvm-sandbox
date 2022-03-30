@@ -10,6 +10,12 @@ from xdsl.ir import Block, Region, Operation, SSAValue, ParametrizedAttribute, D
 from xdsl.dialects.builtin import StringAttr, ArrayAttr, ArrayOfConstraint
 from xdsl.irdl import AttributeDef, OperandDef, ResultDef, RegionDef, SingleBlockRegionDef, irdl_attr_definition, irdl_op_definition, ParameterDef, AnyAttr, VarOperandDef, builder
 
+# This file define a dialect that mirrors the internal structure of ibis.
+# The file contains an `Attribute` for all types encountered in the simple
+# query. Types are defined as being in defined `ibis/expr/types` in the
+# ibis source repo. All other nodes encountered in this translation are
+# encoded as Operations.
+
 
 @irdl_attr_definition
 class TableExpr(ParametrizedAttribute):

@@ -21,6 +21,11 @@ import ibis.backends.pandas.client as PandasBackend
 
 import dialects.ibis_dialect as id
 
+# This file contains the translation from ibis to the ibis_dialect.
+# It is built in a visitor-style, as this is one of the best designs
+# to crawl trees in my experience. The entry-point is the `visit`-
+# function just below. It dispatches to the appropriate translator.
+
 
 @dataclass
 class NodeVisitor:

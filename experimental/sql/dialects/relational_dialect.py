@@ -10,6 +10,11 @@ from xdsl.ir import Block, Region, Operation, SSAValue, ParametrizedAttribute, D
 from xdsl.dialects.builtin import StringAttr, ArrayAttr, ArrayOfConstraint
 from xdsl.irdl import AttributeDef, OperandDef, ResultDef, RegionDef, SingleBlockRegionDef, irdl_attr_definition, irdl_op_definition, ParameterDef, AnyAttr, VarOperandDef, builder
 
+# This file contains the relational dialect. It is currently
+# only aimed at the simple query and mirrors a lot of the
+# ibis dialect. This is subject to change, once the translation
+# to the iterator dialect starts getting in shape.
+
 
 @irdl_attr_definition
 class DataType(ParametrizedAttribute):
