@@ -102,8 +102,8 @@ class Equals(Operation):
 
 
 @irdl_op_definition
-class AlchemyTable(Operation):
-  name: str = "ibis.alchemy_table"
+class PandasTable(Operation):
+  name: str = "ibis.panda_table"
 
   table_name = AttributeDef(StringAttr)
   schema = SingleBlockRegionDef()
@@ -111,8 +111,8 @@ class AlchemyTable(Operation):
 
   @staticmethod
   @builder
-  def get(name: str, Schema: Region) -> 'AlchemyTable':
-    return AlchemyTable.build(
+  def get(name: str, Schema: Region) -> 'PandasTable':
+    return PandasTable.build(
         attributes={"table_name": StringAttr.from_str(name)},
         regions=[Schema],
         result_types=[TableExpr()])
@@ -178,7 +178,7 @@ class Ibis:
     self.ctx.register_attr(int32)
     self.ctx.register_attr(float64)
 
-    self.ctx.register_op(AlchemyTable)
+    self.ctx.register_op(PandasTable)
     self.ctx.register_op(SchemaElement)
     self.ctx.register_op(Selection)
     self.ctx.register_op(Equals)

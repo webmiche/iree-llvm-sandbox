@@ -17,7 +17,7 @@ import ibis.expr.datatypes
 import ibis.expr.operations.relations as rels
 import ibis.expr.operations.generic as gen_types
 from ibis.expr.operations.logical import Equals as EQ
-from ibis.backends.base.sql.alchemy.database import AlchemyTable as AT
+import ibis.backends.pandas.client as PandasBackend
 
 import dialects.ibis_dialect as id
 
@@ -55,9 +55,9 @@ class NodeVisitor:
   def visit_TableExpr(self,
                       table: ibis.expr.types.TableExpr) -> List[Operation]:
     op = table.op()
-    if isinstance(op, AT):
+    if isinstance(op, PandasBackend.PandasTable):
       schema = self.visit_Schema(op.schema)
-      new_op = id.AlchemyTable.get(op.name, schema)
+      new_op = id.PandasTable.get(op.name, schema)
       yield_op = id.Yield.get([new_op])
       return [new_op, yield_op]
     if isinstance(op, rels.Selection):

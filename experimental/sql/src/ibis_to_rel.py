@@ -18,8 +18,8 @@ import dialects.relational_dialect as rel
 class TableRewriter(RewritePattern):
 
   @op_type_rewrite_pattern
-  def match_and_rewrite(self, op: id.AlchemyTable, rewriter: PatternRewriter):
-    new_op = rel.AlchemyTable.build(
+  def match_and_rewrite(self, op: id.PandasTable, rewriter: PatternRewriter):
+    new_op = rel.PandasTable.build(
         regions=[rewriter.move_region_contents_to_new_regions(op.schema)],
         attributes={"table_name": op.table_name},
         result_types=[rel.Bag()])

@@ -61,8 +61,8 @@ class Equals(Operation):
 
 
 @irdl_op_definition
-class AlchemyTable(Operation):
-  name: str = "rel.alchemy_table"
+class PandasTable(Operation):
+  name: str = "rel.pandas_table"
 
   table_name = AttributeDef(StringAttr)
   schema = SingleBlockRegionDef()
@@ -70,8 +70,8 @@ class AlchemyTable(Operation):
 
   @staticmethod
   @builder
-  def get(name: str, Schema: Region, result_type: Attribute) -> 'AlchemyTable':
-    return AlchemyTable.build(
+  def get(name: str, Schema: Region, result_type: Attribute) -> 'PandasTable':
+    return PandasTable.build(
         attributes={"table_name": StringAttr.from_str(name)},
         regions=[Schema],
         result_types=[result_type])
