@@ -19,20 +19,22 @@ connection = ibis.pandas.connect({"t": pd.DataFrame({"a": ["AS", "EU", "NA"]})})
 
 # Get the table.
 table = connection.table('t')
-print(type(table))
 
 # Define the query.
 query = table.filter(table['a'] == 'AS')
+print(query)
+
+# Define an xDSL printer (xdsl needs a Printer class to print since printing requires keeping state).
+p = Printer()
 
 # Define a MLContext, which keeps track of which operations are registered.
 ctx = MLContext()
 
 # Translate the query to the xDSL mirrored dialect.
 xdsl_query = ibis_to_xdsl(ctx, query)
+p.print_op(xdsl_query)
 
 # Rewriter the query to the relational dialect.
 ibis_dialect_to_relational(ctx, xdsl_query)
 
-# Define a printer and print (xdsl needs a Printer class to print since printing requires keeping state).
-p = Printer()
 p.print_op(xdsl_query)
