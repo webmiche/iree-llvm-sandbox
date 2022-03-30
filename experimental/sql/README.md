@@ -1,12 +1,12 @@
 # Prototype SQL dialect(s)
 
-This folder contains a simple stand-alone project that implements a lowering pipeline from the [ibis frontend](https://ibis-project.org/) to the iterator dialect through [xDSL](https://github.com/xdslproject/xdsl). 
+This folder contains a simple stand-alone project that implements a lowering pipeline from the [ibis frontend](https://ibis-project.org/) to the iterator dialect through [xDSL](https://github.com/xdslproject/xdsl).
 
 ## Requirements
 
 To use, first install the dependencies:
 
-```
+```bash
 pip install -r requirements.txt
 ```
 
@@ -14,28 +14,26 @@ pip install -r requirements.txt
 
 Run
 
-```
+```bash
 python simple.py
 ```
 
 This prints three representations of the query `table.filter(table['a'] == 'AS')`:
+
 - the ibis representation
 - the same representation mirrored in xDSL
 - the query in the relational dialect
 
 ## Execute filecheck tests
 
-First, add your current folder to the PYTHONPATH environment variable.
+First, add the path of this subproject to the `PYTHONPATH` environment variable.
 
-```
-pwd
-
-export PYTHONPATH=$PYHTONPATH:*output_of_above_command*
-
+```bash
+export PYTHONPATH=$PYHTONPATH:$(git rev-parse --show-toplevel)/experimental/sql
 ```
 
 Then run:
 
-```
-lit tests/
+```bash
+lit test/
 ```
