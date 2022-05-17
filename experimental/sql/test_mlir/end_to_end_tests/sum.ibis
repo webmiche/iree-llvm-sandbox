@@ -1,0 +1,12 @@
+# RUN: rel_opt.py -f ibis -p ibis-to-alg,alg-to-ssa,ssa-to-impl,impl-to-iterators -t mlir %s | filecheck %s
+
+sum_table.aggregate(sum_table.b.sum())
+
+#      CHECK: module {
+# CHECK-NEXT:   func private @main() {
+# CHECK-NEXT:     %0 = "iterators.sampleInput"() : () -> !iterators.stream<tuple<i32>>
+# CHECK-NEXT:     %1 = "iterators.reduce"(%0) : (!iterators.stream<tuple<i32>>) -> !iterators.stream<tuple<i32>>
+# CHECK-NEXT:     "iterators.sink"(%1) : (!iterators.stream<tuple<i32>>) -> ()
+# CHECK-NEXT:     return
+# CHECK-NEXT:   }
+# CHECK-NEXT: }

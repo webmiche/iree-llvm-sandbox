@@ -82,6 +82,6 @@ def impl_to_iterators(ctx: MLContext, query: ModuleOp):
   # Adding the return
   query.body.blocks[0].add_op(Return.get())
   # Wrapping everything into a main function
-  f = FuncOp.from_region("main", [], [],
+  f = FuncOp.from_region("_mlir__mlir_ciface_main", [], [],
                          Region.from_block_list([query.body.detach_block(0)]))
   query.body.add_block(Block.from_ops([f]))
