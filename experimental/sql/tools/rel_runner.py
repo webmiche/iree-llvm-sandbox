@@ -27,6 +27,7 @@ def main(args):
 
     PassManager.parse('convert-iterators-to-llvm').run(mlir_module)
     PassManager.parse('convert-func-to-llvm').run(mlir_module)
+    print(mlir_module)
 
     shared_libs = ["build/lib/libruntime_utils.so"]
 
