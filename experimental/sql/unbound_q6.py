@@ -37,10 +37,11 @@ p2 = 0.06
 p3 = np.int64(24)
 
 d = ibis.expr.datatypes.Decimal(2, 1)
-filtered = t.filter((t['SHIPDATE'] >= p1) & (t['SHIPDATE'] < p1h) & (
-    t['DISCOUNT'] >= ibis.expr.types.literal(0.05, "decimal")) &
-                    # care, 0.05 is parsed as float
-                    (t['DISCOUNT'] <= np.int64(7)) & (t['QUANTITY'] < p3))
+filtered = t.filter(
+    (t['SHIPDATE'] >= p1) & (t['SHIPDATE'] < p1h) &
+    (t['DISCOUNT'] >= ibis.literal(Decimal("0.05"), "decimal(6, 2)")) &
+    (t['DISCOUNT'] <= ibis.literal(Decimal("0.07"), "decimal(6, 2)")) &
+    (t['QUANTITY'] < p3))
 
 multiply = filtered.projection(
     (filtered['EXTENDEDPRICE'] * filtered['DISCOUNT']).name('im'))
