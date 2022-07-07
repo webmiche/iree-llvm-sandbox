@@ -1,6 +1,7 @@
 # RUN: rel_opt.py -f ibis -p ibis-to-alg,alg-to-ssa,ssa-to-impl,impl-to-iterators -t mlir %s | filecheck %s
 
-sum_table.aggregate(sum_table.b.sum())
+table = ibis.table([("b", "int64")], 't')
+table.aggregate(table.b.sum())
 
 #      CHECK: module {
 # CHECK-NEXT:   func private @main() {
