@@ -365,6 +365,19 @@ class And(Expression):
                       result_types=[Boolean()])
 
 
+@irdl_op_definition
+class CreateTuple(Expression):
+  name = "rel_impl.create_tuple"
+
+  ops = VarOperandDef(DataType)
+  result = ResultDef(Tuple)
+
+  @staticmethod
+  @builder
+  def get(ops: List[Operation], res_type: Tuple) -> 'CreateTuple':
+    return CreateTuple.create(operands=ops, result_types=[res_type])
+
+
 #===------------------------------------------------------------------------===#
 # Operators
 #===------------------------------------------------------------------------===#
@@ -540,3 +553,4 @@ class RelImpl:
     self.ctx.register_op(Yield)
     self.ctx.register_op(And)
     self.ctx.register_op(BinOp)
+    self.ctx.register_op(CreateTuple)

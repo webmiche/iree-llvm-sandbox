@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from xdsl.ir import Operation, MLContext, Region, Block, Attribute
 from typing import List, Type, Optional
 from xdsl.dialects.builtin import ArrayAttr, StringAttr, ModuleOp, IntegerAttr, IntegerType, TupleType
-from xdsl.dialects.llvm import LLVMStructType, LLVMExtractValue, LLVMInsertValue
+from xdsl.dialects.llvm import LLVMStructType, LLVMExtractValue, LLVMInsertValue, LLVMAlloca
 from xdsl.dialects.func import FuncOp, Return
 from xdsl.dialects.arith import Addi, Constant, Cmpi
 
@@ -147,23 +147,37 @@ class YieldRewriter(RelImplRewriter):
 
   @op_type_rewrite_pattern
   def match_and_rewrite(self, op: RelImpl.Yield, rewriter: PatternRewriter):
-    if isinstance(op.parent_op(), RelImpl.Select):
-      rewriter.replace_matched_op(Return.get(*op.ops))
-    else:
-      assert (isinstance(op.parent_op(), RelImpl.Project))
-      for i, o in zip(range(len(op.ops)), op.ops):
-        rewriter.insert_op_before_matched_op(
-            LLVMInsertValue.build(
-                operands=[op.parent_block().args[0], o],
-                attributes={
-                    "position":
-                        ArrayAttr.from_list(
-                            [IntegerAttr.from_index_int_value(i)])
-                },
-                result_types=[
-                    self.convert_bag(op.parent_op().results[0].typ).types
-                ]))
-      rewriter.replace_matched_op(Return.get(op.parent_block().args[0]))
+    rewriter.replace_matched_op(Return.get(*op.ops))
+
+
+@dataclass
+class CreateTupleRewriter(RelImplRewriter):
+
+  @op_type_rewrite_pattern
+  def match_and_rewrite(self, op: RelImpl.CreateTuple,
+                        rewriter: PatternRewriter):
+    c = Constant.from_int_constant(1, 32)
+    alloca = LLVMAlloca.create(
+        operands=[c.results[0]],
+        attributes={
+            "alignment": IntegerAttr.from_int_and_width(0, 32),
+            "elem_type": IntegerType.from_width(32)
+        },
+        result_types=[self.convert_bag(op.parent_op().results[0].typ).types])
+    new_ops = [c, alloca]
+    for i, o in zip(range(len(op.ops)), op.ops):
+      new_ops.append(
+          LLVMInsertValue.build(
+              operands=[new_ops[-1], o],
+              attributes={
+                  "position":
+                      ArrayAttr.from_list([IntegerAttr.from_index_int_value(i)])
+              },
+              result_types=[
+                  self.convert_bag(op.parent_op().results[0].typ).types
+              ]))
+
+    rewriter.replace_matched_op(new_ops)
 
 
 @dataclass
@@ -274,7 +288,7 @@ def impl_to_iterators(ctx: MLContext, query: ModuleOp):
   # IndexByName or to find the right result type in the case of  Yield
   # respectively.
   index_walker = PatternRewriteWalker(GreedyRewritePatternApplier(
-      [IndexByNameRewriter(), YieldRewriter()]),
+      [IndexByNameRewriter(), CreateTupleRewriter()]),
                                       walk_regions_first=False,
                                       apply_recursively=False,
                                       walk_reverse=False)
@@ -286,7 +300,8 @@ def impl_to_iterators(ctx: MLContext, query: ModuleOp):
       LiteralRewriter(),
       CompareRewriter(),
       ProjectRewriter(),
-      BinOpRewriter()
+      BinOpRewriter(),
+      YieldRewriter()
   ]),
                                 walk_regions_first=False,
                                 apply_recursively=False,

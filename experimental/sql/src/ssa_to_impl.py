@@ -105,8 +105,17 @@ class YieldRewriter(RelSSARewriter):
   @op_type_rewrite_pattern
   def match_and_rewrite(self, op: RelSSA.Yield, rewriter: PatternRewriter):
     # TODO: This is a hack to circumvent the FrozenList. Could this be done cleaner?
-    rewriter.replace_matched_op(
-        [RelImpl.Yield.get([o.op for o in op.operands])])
+    if isinstance(op.parent_op(), RelImpl.Select):
+      rewriter.replace_matched_op(
+          [RelImpl.Yield.get([o.op for o in op.operands])])
+    else:
+      assert isinstance(op.parent_op(), RelImpl.Project)
+      rewriter.replace_matched_op([
+          c := RelImpl.CreateTuple.get([o for o in op.operands],
+                                       self.create_tuple_of_bag(
+                                           op.parent_op().results[0].typ)),
+          RelImpl.Yield.get([c])
+      ])
 
 
 #===------------------------------------------------------------------------===#
