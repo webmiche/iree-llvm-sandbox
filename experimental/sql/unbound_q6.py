@@ -31,8 +31,8 @@ t = ibis.table([("ORDERKEY", "int64"), ("PARTKE", "int64"),
 t2 = ibis.table([("im", "int64")], 'u')
 res = ibis.table([("revenue", "int64")], 'line')
 
-p1 = '1994-01-01'
-p1h = '1995-01-01'
+p1 = ibis.literal('1994-01-01', "timestamp")
+p1h = ibis.literal('1995-01-01', "timestamp")
 p2 = 0.06
 p3 = np.int64(24)
 
