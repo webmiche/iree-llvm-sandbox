@@ -4,6 +4,7 @@
 #include "iterators/Utils/NameAssigner.h"
 #include "mlir/Dialect/LLVMIR/LLVMTypes.h"
 #include "mlir/IR/BuiltinAttributes.h"
+#include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 using namespace mlir;
@@ -37,7 +38,8 @@ static SymbolTriple assignFunctionNames(Operation *op,
 /// to the index of the next struct returned by the iterator.
 static LLVM::LLVMStructType
 computeStateType(ConstantStreamOp op,
-                 llvm::SmallVector<LLVM::LLVMStructType> upstreamStateTypes) {
+                 llvm::SmallVector<LLVM::LLVMStructType> /*upstreamStateTypes*/,
+                 TypeConverter & /*typeConverter*/) {
   MLIRContext *context = op->getContext();
   Type i32 = IntegerType::get(context, /*width=*/32);
   return LLVM::LLVMStructType::getNewIdentified(
@@ -48,7 +50,8 @@ computeStateType(ConstantStreamOp op,
 /// i.e., the state of the iterator that produces its input stream.
 static LLVM::LLVMStructType
 computeStateType(FilterOp op,
-                 llvm::SmallVector<LLVM::LLVMStructType> upstreamStateTypes) {
+                 llvm::SmallVector<LLVM::LLVMStructType> upstreamStateTypes,
+                 TypeConverter & /*typeConverter*/) {
   return LLVM::LLVMStructType::getNewIdentified(
       op->getContext(), "iterators.filter_state", {upstreamStateTypes[0]});
 }
@@ -57,7 +60,8 @@ computeStateType(FilterOp op,
 /// i.e., the state of the iterator that produces its input stream.
 static LLVM::LLVMStructType
 computeStateType(MapOp op,
-                 llvm::SmallVector<LLVM::LLVMStructType> upstreamStateTypes) {
+                 llvm::SmallVector<LLVM::LLVMStructType> upstreamStateTypes,
+                 TypeConverter & /*typeConverter*/) {
   return LLVM::LLVMStructType::getNewIdentified(
       op->getContext(), "iterators.map_state", {upstreamStateTypes[0]});
 }
@@ -66,10 +70,29 @@ computeStateType(MapOp op,
 /// i.e., the state of the iterator that produces its input stream.
 static LLVM::LLVMStructType
 computeStateType(ReduceOp op,
-                 llvm::SmallVector<LLVM::LLVMStructType> upstreamStateTypes) {
+                 llvm::SmallVector<LLVM::LLVMStructType> upstreamStateTypes,
+                 TypeConverter & /*typeConverter*/) {
   assert(upstreamStateTypes.size() == 1);
   return LLVM::LLVMStructType::getNewIdentified(
       op->getContext(), "iterators.reduce_state", {upstreamStateTypes[0]});
+}
+
+/// The state of ScanColumnarBatchOp consists of a single number that
+/// corresponds to the index of the next struct returned by the iterator and the
+/// input columnar batch. Pseudo-code:
+///
+/// template <typename BatchType>
+/// struct { int64_t currentIndex; BatchType batch; }
+static LLVM::LLVMStructType
+computeStateType(ScanColumnarBatchOp op,
+                 llvm::SmallVector<LLVM::LLVMStructType> /*upstreamStateTypes*/,
+                 TypeConverter &typeConverter) {
+  MLIRContext *context = op->getContext();
+  Type i64 = IntegerType::get(context, /*width=*/64);
+  Type batchType = typeConverter.convertType(op.batch().getType());
+  return LLVM::LLVMStructType::getNewIdentified(
+      op->getContext(), "iterators.scan_columnar_batch_state",
+      {i64, batchType});
 }
 
 /// Build IteratorInfo, assigning new unique names as needed.
@@ -103,7 +126,8 @@ static OpTy getSelfOrParentOfType(Operation *op) {
   return maybe ? maybe : op->getParentOfType<OpTy>();
 }
 
-mlir::iterators::IteratorAnalysis::IteratorAnalysis(Operation *rootOp)
+mlir::iterators::IteratorAnalysis::IteratorAnalysis(
+    Operation *rootOp, TypeConverter &typeConverter)
     : rootOp(rootOp), nameAssigner(getSelfOrParentOfType<ModuleOp>(rootOp)) {
   /// This needs to be built in use-def order so that all uses are visited
   /// before any def.
@@ -115,7 +139,8 @@ mlir::iterators::IteratorAnalysis::IteratorAnalysis(Operation *rootOp)
             ConstantStreamOp,
             FilterOp,
             MapOp,
-            ReduceOp
+            ReduceOp,
+            ScanColumnarBatchOp
             // clang-format on
             >([&](auto op) {
           llvm::SmallVector<LLVM::LLVMStructType> upstreamStateTypes;
@@ -128,7 +153,7 @@ mlir::iterators::IteratorAnalysis::IteratorAnalysis(Operation *rootOp)
                             return getExpectedIteratorInfo(def).stateType;
                           });
           LLVM::LLVMStructType stateType =
-              computeStateType(op, upstreamStateTypes);
+              computeStateType(op, upstreamStateTypes, typeConverter);
           setIteratorInfo(op, IteratorInfo(op, nameAssigner, stateType));
         })
         .Default([&](auto op) { assert(false && "Unexpected op"); });

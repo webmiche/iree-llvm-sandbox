@@ -12,9 +12,13 @@
 #include "IteratorAnalysis.h"
 #include "iterators/Dialect/Iterators/IR/Iterators.h"
 #include "iterators/Utils/MLIRSupport.h"
+#include "mlir/Conversion/LLVMCommon/MemRefBuilder.h"
+#include "mlir/Conversion/LLVMCommon/Pattern.h"
 #include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
 #include "mlir/Dialect/Arithmetic/Utils/Utils.h"
+#include "mlir/Dialect/Bufferization/IR/Bufferization.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/Func/Transforms/FuncConversions.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/SCF/SCF.h"
 #include "mlir/IR/BlockAndValueMapping.h"
@@ -44,12 +48,34 @@ struct ConvertIteratorsToLLVMPass
 /// Maps types from the Iterators dialect to corresponding types in LLVM.
 class IteratorsTypeConverter : public TypeConverter {
 public:
-  IteratorsTypeConverter() {
+  IteratorsTypeConverter(LLVMTypeConverter &llvmTypeConverter)
+      : llvmTypeConverter(llvmTypeConverter) {
     addConversion([](Type type) { return type; });
+    addConversion(convertColumnarBatchType);
     addConversion(convertTupleType);
+
+    // Convert MemRefType using LLVMTypeConverter.
+    addConversion([&](Type type) -> llvm::Optional<Type> {
+      if (type.isa<MemRefType>())
+        return llvmTypeConverter.convertType(type);
+      return llvm::None;
+    });
   }
 
 private:
+  /// Maps a ColumnarBatchType to an LLVMStruct of pointers.
+  static Optional<Type> convertColumnarBatchType(Type type) {
+    if (auto batchType = type.dyn_cast<ColumnarBatchType>()) {
+      Type i64 = IntegerType::get(type.getContext(), /*width=*/64);
+      SmallVector<Type> fieldTypes{i64};
+      fieldTypes.reserve(batchType.getTypes().size() + 1);
+      llvm::transform(batchType.getTypes(), std::back_inserter(fieldTypes),
+                      [](Type t) { return LLVMPointerType::get(t); });
+      return LLVMStructType::getLiteral(type.getContext(), fieldTypes);
+    }
+    return llvm::None;
+  }
+
   /// Maps a TupleType to a corresponding LLVMStructType.
   static Optional<Type> convertTupleType(Type type) {
     if (auto tupleType = type.dyn_cast<TupleType>()) {
@@ -58,6 +84,8 @@ private:
     }
     return llvm::None;
   }
+
+  LLVMTypeConverter llvmTypeConverter;
 };
 
 /// Return a symbol reference to the printf function, inserting it into the
@@ -120,6 +148,66 @@ static Value getOrCreateGlobalString(OpBuilder &builder, Twine name,
   return builder.create<GEPOp>(loc, LLVMPointerType::get(builder.getI8Type()),
                                globalPtr, ArrayRef<Value>({zero, zero}));
 }
+
+/// Lowers columnar_batch_from_memrefs to LLVM IR that extracts the bare
+/// pointers and the number of elements from the given memrefs.
+///
+/// Possible result:
+///
+/// %1 = builtin.unrealized_conversion_cast %0 :
+///        memref<3xi32> to !llvm.struct<(ptr<i32>, ptr<i32>, i64,
+///                                       array<1 x i64>, array<1 x i64>)>
+/// %2 = llvm.mlir.undef : !llvm.struct<(i64, ptr<i32>)>
+/// %3 = llvm.extractvalue %1[1] :
+///        !llvm.struct<(ptr<i32>, ptr<i32>, i64,
+///                      array<1 x i64>, array<1 x i64>)>
+/// %4 = llvm.extractvalue %1[3, 0] :
+///        !llvm.struct<(ptr<i32>, ptr<i32>, i64,
+///                      array<1 x i64>, array<1 x i64>)>
+/// %5 = llvm.insertvalue %3, %2[1 : index] : !llvm.struct<(i64, ptr<i32>)>
+/// %6 = llvm.insertvalue %4, %5[0 : index] : !llvm.struct<(i64, ptr<i32>)>
+struct ColumnarBatchFromMemrefsLowering
+    : public OpConversionPattern<ColumnarBatchFromMemrefsOp> {
+  ColumnarBatchFromMemrefsLowering(TypeConverter &typeConverter,
+                                   MLIRContext *context,
+                                   PatternBenefit benefit = 1)
+      : OpConversionPattern(typeConverter, context, benefit) {}
+
+  LogicalResult match(ColumnarBatchFromMemrefsOp op) const override {
+    return success();
+  }
+
+  void rewrite(ColumnarBatchFromMemrefsOp op, OpAdaptor adaptor,
+               ConversionPatternRewriter &rewriter) const override {
+    Location loc = op->getLoc();
+
+    // Create empty struct for batch.
+    Type batchStructType = typeConverter->convertType(op.batch().getType());
+    Value batchStruct = rewriter.create<UndefOp>(loc, batchStructType);
+
+    // Extract column pointers and number of elements.
+    Value numElements;
+    for (const auto &indexedOperand : llvm::enumerate(adaptor.getOperands())) {
+      // Extract pointer and number of elements from memref descriptor.
+      MemRefDescriptor descriptor(indexedOperand.value());
+      Value ptr = descriptor.alignedPtr(rewriter, loc);
+      if (indexedOperand.index() == 0) {
+        numElements = descriptor.size(rewriter, loc, 0);
+      }
+
+      // Insert pointer into batch struct.
+      auto idx = static_cast<int64_t>(indexedOperand.index()) + 1;
+      batchStruct = createInsertValueOp(rewriter, loc, batchStruct, ptr, {idx});
+    }
+
+    // Insert number of elements.
+    batchStruct =
+        createInsertValueOp(rewriter, loc, batchStruct, numElements, {0});
+
+    // Replace original op.
+    rewriter.replaceOp(op, {batchStruct});
+  }
+};
 
 struct ConstantTupleLowering : public OpConversionPattern<ConstantTupleOp> {
   ConstantTupleLowering(TypeConverter &typeConverter, MLIRContext *context,
@@ -998,6 +1086,180 @@ static Value buildStateCreation(ReduceOp op, ReduceOp::Adaptor adaptor,
 }
 
 //===----------------------------------------------------------------------===//
+// ScanColumnarBatchOp.
+//===----------------------------------------------------------------------===//
+
+/// Builds IR that (re) sets the current index to zero. Possible output:
+///
+/// %0 = llvm.mlir.constant(0 : i64) : i64
+/// %1 = llvm.insertvalue %0, %arg0[0 : index] :
+///          !llvm.struct<"iterators.scan_columnar_batch_state",
+///                       (i64, !columnnar_batch_type)>
+static Value buildOpenBody(ScanColumnarBatchOp op, RewriterBase &rewriter,
+                           Value initialState,
+                           ArrayRef<IteratorInfo> upstreamInfos) {
+  Location loc = op.getLoc();
+
+  // Insert constant zero into state.
+  Type i64 = rewriter.getI64Type();
+  Attribute zeroAttr = rewriter.getI64IntegerAttr(0);
+  Value zeroValue = rewriter.create<LLVM::ConstantOp>(loc, i64, zeroAttr);
+  Value updatedState =
+      createInsertValueOp(rewriter, loc, initialState, zeroValue, {0});
+
+  return updatedState;
+}
+
+/// Builds IR that assembles an element from the values at the current index and
+/// increments that index. Pseudo-code: Pseudo-code:
+///
+/// tuple = (tensor[current_index] for tensor in input)
+/// current_index++
+/// return tuple
+///
+/// Possible output:
+///
+/// %0 = llvm.extractvalue %arg0[0 : index] :
+///          !llvm.struct<"iterators.scan_columnar_batch_state",
+///                       (i64, !columnar_batch_type)>
+/// %1 = llvm.extractvalue %arg0[1 : index] :
+///          !llvm.struct<"iterators.scan_columnar_batch_state",
+///                       (i64, !columnar_batch_type)>
+/// %2 = llvm.extractvalue %1[0 : index] : !llvm.!columnar_batch_type
+/// %3 = arith.cmpi slt, %0, %2 : i64
+/// %4:2 = scf.if %3 -> (!llvm.struct<"iterators.scan_columnar_batch_state",
+///                                   (i64, !columnar_batch_type)>,
+///                      !element_type) {
+///   %c1_i64 = arith.constant 1 : i64
+///   %5 = arith.addi %0, %c1_i64 : i64
+///   %6 = llvm.insertvalue %5, %arg0[0 : index] :
+///            !llvm.struct<"iterators.scan_columnar_batch_state",
+///                         (i64, !columnar_batch_type)>
+///   %7 = llvm.mlir.undef : !element_type
+///   %8 = llvm.extractvalue %1[1 : index] : !llvm.!columnar_batch_type
+///   %9 = llvm.getelementptr %8[%0] :
+///            (!llvm.ptr<!column_type_0>, i64) -> !llvm.ptr<!column_type_0>
+///   %10 = llvm.load %9 : !llvm.ptr<!column_type_0>
+///   %11 = llvm.insertvalue %10, %7[0 : index] : !element_type
+///   scf.yield %6, %11 :
+///       !llvm.struct<"iterators.scan_columnar_batch_state",
+///                    (i64, !columnar_batch_type)>,
+///       !element_type
+/// } else {
+///   %5 = llvm.mlir.undef : !element_type
+///   scf.yield %arg0, %5 :
+///       !llvm.struct<"iterators.scan_columnar_batch_state",
+///                    (i64, !columnar_batch_type)>,
+///       !element_type
+/// }
+static llvm::SmallVector<Value, 4>
+buildNextBody(ScanColumnarBatchOp op, RewriterBase &rewriter,
+              Value initialState, ArrayRef<IteratorInfo> upstreamInfos,
+              Type elementType) {
+  Type i64 = rewriter.getI64Type();
+  Location loc = op->getLoc();
+  auto elementStructType = elementType.cast<LLVMStructType>();
+
+  // Extract current index.
+  Value currentIndex =
+      createExtractValueOp(rewriter, loc, i64, initialState, {0});
+
+  // Extract input batch.
+  auto stateType = initialState.getType().cast<LLVMStructType>();
+  Type convertedInputBatchType = stateType.getBody()[1];
+  Value inputBatch = createExtractValueOp(
+      rewriter, loc, convertedInputBatchType, initialState, {1});
+
+  // Test if we have reached the end of the range.
+  Value lastIndex = createExtractValueOp(rewriter, loc, i64, inputBatch, {0});
+
+  ArithBuilder ab(rewriter, op.getLoc());
+  Value hasNext = ab.slt(currentIndex, lastIndex);
+  auto ifOp = rewriter.create<scf::IfOp>(
+      loc, TypeRange{initialState.getType(), elementType}, hasNext,
+      /*thenBuilder=*/
+      [&](OpBuilder &builder, Location loc) {
+        // Increment index and update state.
+        Value one = builder.create<arith::ConstantIntOp>(loc, /*value=*/1,
+                                                         /*width=*/64);
+        ArithBuilder ab(builder, loc);
+        Value updatedCurrentIndex = ab.add(currentIndex, one);
+        Value updatedState = createInsertValueOp(rewriter, loc, initialState,
+                                                 updatedCurrentIndex, {0});
+
+        // Assemble field values from values at current index of column
+        // pointers.
+        Value nextElement = rewriter.create<UndefOp>(loc, elementType);
+        for (const auto &indexedFieldType :
+             llvm::enumerate(elementStructType.getBody())) {
+          auto fieldIndex = static_cast<int64_t>(indexedFieldType.index());
+          Type fieldType = indexedFieldType.value();
+          Type columnPointerType = LLVMPointerType::get(fieldType);
+
+          // Extract column pointer.
+          Value columnPtr = createExtractValueOp(
+              rewriter, loc, columnPointerType, inputBatch, {fieldIndex + 1});
+
+          // Get element pointer.
+          Value gep = rewriter.create<GEPOp>(loc, columnPointerType, columnPtr,
+                                             ValueRange{currentIndex});
+
+          // Load.
+          Value fieldValue = rewriter.create<LoadOp>(loc, gep);
+
+          // Insert into next element struct.
+          nextElement = createInsertValueOp(rewriter, loc, nextElement,
+                                            fieldValue, {fieldIndex});
+        }
+
+        builder.create<scf::YieldOp>(loc,
+                                     ValueRange{updatedState, nextElement});
+      },
+      /*elseBuilder=*/
+      [&](OpBuilder &builder, Location loc) {
+        // Don't modify state; return undef element.
+        Value nextElement = rewriter.create<UndefOp>(loc, elementType);
+        builder.create<scf::YieldOp>(loc,
+                                     ValueRange{initialState, nextElement});
+      });
+
+  Value finalState = ifOp->getResult(0);
+  Value nextElement = ifOp.getResult(1);
+  return {finalState, hasNext, nextElement};
+}
+
+/// Builds IR that does nothing. The ScanColumnarBatchOp does not need to do
+/// anything on close.
+static Value buildCloseBody(ScanColumnarBatchOp /*op*/,
+                            RewriterBase & /*rewriter*/, Value initialState,
+                            ArrayRef<IteratorInfo> /*upstreamInfos*/) {
+  return initialState;
+}
+
+/// Builds IR that initializes the iterator state with the input columnar batch
+/// and an undefined current index. Possible output:
+///
+/// %0 = ...
+/// %1 = llvm.mlir.undef : !llvm.struct<"iterators.scan_columnar_batch_state",
+///                                     (i64, !columnar_batch_type)>
+/// %2 = llvm.insertvalue %0, %1[1 : index] :
+///          !llvm.struct<"iterators.scan_columnar_batch_state",
+///                       (i64, !columnar_batch_type)>
+static Value buildStateCreation(ScanColumnarBatchOp op,
+                                ScanColumnarBatchOp::Adaptor adaptor,
+                                RewriterBase &rewriter,
+                                LLVM::LLVMStructType stateType) {
+  Location loc = op.getLoc();
+
+  // Insert input into iterator state.
+  Value iteratorState = rewriter.create<UndefOp>(loc, stateType);
+  Value batch = adaptor.batch();
+  iteratorState = createInsertValueOp(rewriter, loc, iteratorState, batch, {1});
+
+  return iteratorState;
+}
+
+//===----------------------------------------------------------------------===//
 // Helpers for creating Open/Next/Close functions and state creation.
 //===----------------------------------------------------------------------===//
 
@@ -1054,7 +1316,8 @@ static Value buildOpenBody(Operation *op, RewriterBase &rewriter,
           ConstantStreamOp,
           FilterOp,
           MapOp,
-          ReduceOp
+          ReduceOp,
+          ScanColumnarBatchOp
           // clang-format on
           >([&](auto op) {
         return buildOpenBody(op, rewriter, initialState, upstreamInfos);
@@ -1071,7 +1334,8 @@ buildNextBody(Operation *op, RewriterBase &rewriter, Value initialState,
           ConstantStreamOp,
           FilterOp,
           MapOp,
-          ReduceOp
+          ReduceOp,
+          ScanColumnarBatchOp
           // clang-format on
           >([&](auto op) {
         return buildNextBody(op, rewriter, initialState, upstreamInfos,
@@ -1089,7 +1353,8 @@ static Value buildCloseBody(Operation *op, RewriterBase &rewriter,
           ConstantStreamOp,
           FilterOp,
           MapOp,
-          ReduceOp
+          ReduceOp,
+          ScanColumnarBatchOp
           // clang-format on
           >([&](auto op) {
         return buildCloseBody(op, rewriter, initialState, upstreamInfos);
@@ -1106,7 +1371,8 @@ static Value buildStateCreation(IteratorOpInterface op, RewriterBase &rewriter,
           ConstantStreamOp,
           FilterOp,
           MapOp,
-          ReduceOp
+          ReduceOp,
+          ScanColumnarBatchOp
           // clang-format on
           >([&](auto op) {
         using OpAdaptor = typename decltype(op)::Adaptor;
@@ -1401,7 +1667,7 @@ static Value convertIteratorOp(Operation *op, ValueRange operands,
 ///    (which it has walked before) to the conversion logic.
 static void convertIteratorOps(ModuleOp module, TypeConverter &typeConverter) {
   IRRewriter rewriter(module.getContext());
-  IteratorAnalysis analysis(module);
+  IteratorAnalysis analysis(module, typeConverter);
   BlockAndValueMapping mapping;
 
   // Collect all iterator ops in a worklist. Within each block, the iterator
@@ -1457,24 +1723,55 @@ static void convertIteratorOps(ModuleOp module, TypeConverter &typeConverter) {
 
 void mlir::iterators::populateIteratorsToLLVMConversionPatterns(
     RewritePatternSet &patterns, TypeConverter &typeConverter) {
-  patterns.add<ConstantTupleLowering, PrintTupleOpLowering, PrintOpLowering>(
-      typeConverter, patterns.getContext());
+  patterns.add<ColumnarBatchFromMemrefsLowering, ConstantTupleLowering,
+               PrintTupleOpLowering, PrintOpLowering>(typeConverter,
+                                                      patterns.getContext());
 }
 
 void ConvertIteratorsToLLVMPass::runOnOperation() {
   auto module = getOperation();
-  IteratorsTypeConverter typeConverter;
+  LLVMTypeConverter llvmTypeConverter(&getContext());
+  IteratorsTypeConverter typeConverter(llvmTypeConverter);
 
   // Convert iterator ops with custom walker.
   convertIteratorOps(module, typeConverter);
 
   // Convert the remaining ops of this dialect using dialect conversion.
   ConversionTarget target(getContext());
-  target.addLegalDialect<arith::ArithmeticDialect, FuncDialect, LLVMDialect,
+  target.addLegalDialect<arith::ArithmeticDialect,
+                         bufferization::BufferizationDialect, LLVMDialect,
                          scf::SCFDialect>();
-  target.addLegalOp<ModuleOp>();
+  target.addLegalOp<ModuleOp, UnrealizedConversionCastOp>();
   RewritePatternSet patterns(&getContext());
+
   populateIteratorsToLLVMConversionPatterns(patterns, typeConverter);
+
+  // Add patterns that converts function signature and calls.
+  populateFunctionOpInterfaceTypeConversionPattern<FuncOp>(patterns,
+                                                           typeConverter);
+  populateCallOpTypeConversionPattern(patterns, typeConverter);
+
+  // Force application of that pattern if signature is not legal yet.
+  target.addDynamicallyLegalOp<func::FuncOp>([&](func::FuncOp op) {
+    return typeConverter.isSignatureLegal(op.getFunctionType());
+  });
+  target.addDynamicallyLegalOp<func::ReturnOp>([&](func::ReturnOp op) {
+    return typeConverter.isLegal(op.getOperandTypes());
+  });
+  target.addDynamicallyLegalOp<func::CallOp>([&](func::CallOp op) {
+    return typeConverter.isSignatureLegal(op.getCalleeType());
+  });
+
+  // Use UnrealizedConversionCast as materializations, which have to be cleaned
+  // up by later passes.
+  auto addUnrealizedCast = [](OpBuilder &builder, Type type, ValueRange inputs,
+                              Location loc) {
+    auto cast = builder.create<UnrealizedConversionCastOp>(loc, type, inputs);
+    return Optional<Value>(cast.getResult(0));
+  };
+  typeConverter.addSourceMaterialization(addUnrealizedCast);
+  typeConverter.addTargetMaterialization(addUnrealizedCast);
+
   if (failed(applyFullConversion(module, target, std::move(patterns))))
     signalPassFailure();
 }

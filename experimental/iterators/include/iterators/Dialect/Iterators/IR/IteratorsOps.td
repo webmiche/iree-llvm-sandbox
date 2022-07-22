@@ -50,6 +50,33 @@ def Iterators_PrintOp : Iterators_Base_Op<"print"> {
   let arguments = (ins Iterators_LLVMStructOfNumerics:$element);
 }
 
+def Iterators_ColumnarBatchFromMemrefsOp
+    : Iterators_Base_Op<"columnar_batch_from_memrefs"> {
+  let summary = "Creates a `columnar_batch` from the given memrefs";
+  let description = [{
+    Converts a variadic number of memrefs of rank 1 into the columns of a
+    `columnar_batch` with corresponding column types. This currently only works
+    for memrefs that can be represented with a bare pointer, i.e., those with a
+    contiguous memory layout. In this case, no copy is involved. Furthermore, no
+    dynamic dimension is allowed currently (in order to avoid runtime checks).
+
+    This op may serve as an interface to other dialects and is useful for
+    creating `columnar_batch`es in unit tests.
+
+    Example:
+    ```mlir
+      %t1 = arith.constant dense<[0, 1, 2]> : tensor<3xi32>
+      %t2 = arith.constant dense<[3, 4, 5]> : tensor<3xi64>
+      %batch = "iterators.columnar_batch_from_memrefs"(%t1, %t2)
+        : (tensor<3xi32>, tensor<3xi64>)
+          -> !iterators.columnar_batch<tuple<i32,i64>>
+    ```
+  }];
+  let arguments = (ins Variadic<AnyMemRef>:$memrefs);
+  let results = (outs Iterators_ColumnarBatch:$batch);
+  let hasVerifier = true;
+}
+
 //===----------------------------------------------------------------------===//
 // High-level iterators
 //===----------------------------------------------------------------------===//
@@ -263,6 +290,30 @@ def Iterators_ReduceOp : Iterators_Op<"reduce",
           *this, reduceFuncRefAttr());
     }
   }];
+}
+
+def Iterators_ScanColumnarBatchOp : Iterators_Op<"scan_columnar_batch",
+    [AllMatch<["$batch.getType().cast<ColumnarBatchType>().getTypes()",
+               "$result.getType().cast<StreamType>().getElementType()"
+               "    .cast<LLVM::LLVMStructType>().getBody()"],
+              "the field types of the LLVM struct in the result stream must "
+              "match the types of the input batch">]> {
+  let summary = "Extracts the tuples from a columnar batch";
+  let description = [{
+    Produces a stream of LLVM structs from a given `columnar_batch` (i.e.,
+    "scans" the given `columnar_batch`). Each LLVM struct is assembled from the
+    values in the different columns at the same index, and the op produces the
+    tuples at all indices in ascending order.
+
+    Example:
+    ```mlir
+    %stream = "iterators.scan_columnar_batch"(%batch)
+      : (!iterators.columnar_batch<!tuple_type>)
+        -> !iterators.stream<!struct_type>
+    ```
+  }];
+  let arguments = (ins Iterators_ColumnarBatch:$batch);
+  let results = (outs Iterators_StreamOfLLVMStructOfNumerics:$result);
 }
 
 /// The sink op is a special op that only consumes a stream of values and
