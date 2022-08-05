@@ -18,8 +18,8 @@ getcontext().prec = 2
 
 t = ibis.table([("ORDERKEY", "int64"), ("PARTKE", "int64"),
                 ("SUPPKEY", "int64"), ("LINENUMBER", "int64"),
-                ("QUANTITY", "int64"), ("EXTENDEDPRICE", "decimal"),
-                ("DISCOUNT", "decimal"), ("TAX", "decimal"),
+                ("QUANTITY", "int64"), ("EXTENDEDPRICE", "decimal(32, 2)"),
+                ("DISCOUNT", "decimal(32, 2)"), ("TAX", "decimal(32, 2)"),
                 ("RETURNFLAG", "string"), ("LINESTATUS", "string"),
                 ("SHIPDATE", "timestamp"), ("COMMITDATE", "timestamp"),
                 ("RECEIPTDATE", "timestamp"), ("SHIPINSTRUCT", "string"),
