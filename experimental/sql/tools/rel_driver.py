@@ -66,48 +66,37 @@ multiply = filtered.projection(
 
 query = multiply.aggregate(multiply.im.sum().name('revenue'))
 
-
-def dec_to_int(x: str) -> int:
-  return int(Decimal(x) * Decimal(100).to_integral())
-
-
-lineitem = pd.read_table(
-    '/home/michel/MasterThesis/TPC-H/TPC-H_Tools_v3.0.0/dbgen/lineitem.tbl',
-    delimiter="|",
-    names=[
-        "ORDERKEY", "PARTKEY", "SUPPKEY", "LINENUMBER", "QUANTITY",
-        "EXTENDEDPRICE", "DISCOUNT", "TAX", "RETURNFLAG", "LINESTATUS",
-        "SHIPDATE", "COMMITDATE", "RECEIPTDATE", "SHIPINSTRUCT", "SHIPMODE",
-        "COMMENT"
-    ],
-    dtype={
-        'ORDERKEY': np.int64,
-        "PARTKEY": np.int64,
-        "SUPPKEY": np.int64,
-        "LINENUMBER": np.int64,
-        "QUANTITY": np.int64,
-        "EXTENDEDPRICE": object,
-        "DISCOUNT": object,
-        "TAX": object,
-        "RETURNFLAG": str,
-        "LINESTATUS": str,
-        "SHIPDATE": object,
-        "COMMITDATE": object,
-        "RECEIPTDATE": object,
-        "SHIPINSTRUCT": str,
-        "SHIPMODE": str,
-        "COMMENT": str
-    },
-    infer_datetime_format=True,
-    parse_dates=["SHIPDATE", "COMMITDATE", "RECEIPTDATE"],
-    converters={
-        "DISCOUNT": lambda x: dec_to_int(x),
-        "EXTENDEDPRICE": lambda x: dec_to_int(x),
-        "TAX": lambda x: dec_to_int(x)
-    },
-    index_col=False)
+lineitem = pd.read_table('/home/michel/MasterThesis/dbgen/lineitem.tbl',
+                         delimiter="|",
+                         names=[
+                             "ORDERKEY", "PARTKEY", "SUPPKEY", "LINENUMBER",
+                             "QUANTITY", "EXTENDEDPRICE", "DISCOUNT", "TAX",
+                             "RETURNFLAG", "LINESTATUS", "SHIPDATE",
+                             "COMMITDATE", "RECEIPTDATE", "SHIPINSTRUCT",
+                             "SHIPMODE", "COMMENT"
+                         ],
+                         dtype={
+                             'ORDERKEY': np.int64,
+                             "PARTKEY": np.int64,
+                             "SUPPKEY": np.int64,
+                             "LINENUMBER": np.int64,
+                             "QUANTITY": np.int64,
+                             "EXTENDEDPRICE": np.int64,
+                             "DISCOUNT": np.int64,
+                             "TAX": np.int64,
+                             "RETURNFLAG": str,
+                             "LINESTATUS": str,
+                             "SHIPDATE": np.int64,
+                             "COMMITDATE": np.int64,
+                             "RECEIPTDATE": np.int64,
+                             "SHIPINSTRUCT": str,
+                             "SHIPMODE": str,
+                             "COMMENT": str
+                         },
+                         infer_datetime_format=True,
+                         index_col=False)
 
 df = lineitem[['QUANTITY', 'EXTENDEDPRICE', 'DISCOUNT', 'SHIPDATE']]
 print(df.dtypes)
 
-run(filtered, df)
+run(query, df)

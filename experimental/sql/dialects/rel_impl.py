@@ -554,7 +554,7 @@ class Aggregate(Operator):
             "functions":
                 ArrayAttr.from_list([StringAttr.from_str(f) for f in functions])
         },
-        result_types=[Bag.get([Int32()] * len(functions), res_names)])
+        result_types=[Bag.get([Int64()] * len(functions), res_names)])
 
 
 @dataclass
