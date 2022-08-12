@@ -6,7 +6,8 @@ import os
 import pandas as pd
 import numpy as np
 
-from mlir_iterators.runtime.pandas_to_iterators import to_columnar_batch_descriptor
+from python.mlir_iterators.runtime.pandas_to_iterators import to_columnar_batch_descriptor
+import python.mlir_iterators.runtime.iterators_executor as ie
 from mlir_iterators.dialects import iterators as it
 from mlir_iterators.passmanager import PassManager
 from mlir_iterators.execution_engine import ExecutionEngine
@@ -71,7 +72,8 @@ def testConvertIteratorsToLlvm():
 @run
 # CHECK-LABEL: TEST: testEndToEndStandalone
 def testEndToEndStandalone():
-  mod = Module.parse('''
+  ie.run(
+      """
       !element_type = !llvm.struct<(i32)>
       func.func private @sum_struct(%lhs : !element_type, %rhs : !element_type) -> !element_type {
         %lhsi = llvm.extractvalue %lhs[0 : index] : !element_type
@@ -89,19 +91,19 @@ def testEndToEndStandalone():
         "iterators.sink"(%reduce) : (!iterators.stream<!element_type>) -> ()
         return
       }
-      ''')
-  pm = PassManager.parse('convert-iterators-to-llvm,convert-func-to-llvm,' +
-                         'convert-scf-to-cf,convert-cf-to-llvm')
-  pm.run(mod)
-  engine = ExecutionEngine(mod)
+      """, [])
   # CHECK: (6)
-  engine.invoke('main')
 
 
 @run
 # CHECK-LABEL: TEST: testEndToEndWithInput
 def testEndToEndWithInput():
-  mod = Module.parse('''
+  data = np.array([(0, 3), (1, 4), (2, 5)], dtype=[('a', 'i4'), ('b', 'i8')])
+  df = pd.DataFrame.from_records(data)
+  arg = ctypes.pointer(to_columnar_batch_descriptor(df))
+
+  ie.run(
+      """
       !tuple_type = tuple<i32,i64>
       !struct_type = !llvm.struct<(i32,i64)>
       func.func @main(%input: !iterators.columnar_batch<!tuple_type>)
@@ -112,18 +114,7 @@ def testEndToEndWithInput():
         "iterators.sink"(%stream) : (!iterators.stream<!struct_type>) -> ()
         return
       }
-      ''')
-  pm = PassManager.parse(
-      'convert-iterators-to-llvm,convert-memref-to-llvm,convert-func-to-llvm,'
-      'reconcile-unrealized-casts,convert-scf-to-cf,convert-cf-to-llvm')
-  pm.run(mod)
-
-  data = np.array([(0, 3), (1, 4), (2, 5)], dtype=[('a', 'i4'), ('b', 'i8')])
-  df = pd.DataFrame.from_records(data)
-  arg = ctypes.pointer(to_columnar_batch_descriptor(df))
-
+      """, [arg])
   # CHECK:      (0, 3)
   # CHECK-NEXT: (1, 4)
   # CHECK-NEXT: (2, 5)
-  engine = ExecutionEngine(mod)
-  engine.invoke('main', arg)

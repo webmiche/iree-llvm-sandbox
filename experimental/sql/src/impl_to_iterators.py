@@ -343,6 +343,7 @@ def impl_to_iterators(ctx: MLContext, query: ModuleOp):
   query.body.detach_block(0)
   f = FuncOp.from_region("main", batches, [],
                          Region.from_block_list([body_block]))
+  f.attributes['llvm.emit_c_interface'] = None
   query.body.add_block(Block.from_ops([f]))
   # Populating a mapping from table names to BlockArguments
   for n, b in zip(names, f.body.blocks[0].args):
