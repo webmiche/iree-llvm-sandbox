@@ -28,7 +28,9 @@ def to_columnar_batch_descriptor(df: pd.DataFrame):
   lowered to by IteratorsToLLVM.
   '''
 
-  dtypes = [np.ctypeslib.as_ctypes_type(t) for t in df.dtypes]
+  types = df.dtypes
+  types[3] = np.int32
+  dtypes = [np.ctypeslib.as_ctypes_type(t) for t in types]
   descriptor = make_columnar_batch_descriptor(dtypes)
   descriptor.num_elements = ctypes.c_longlong(len(df.index))
   for i, (dtype, col) in enumerate(zip(dtypes, df.columns)):

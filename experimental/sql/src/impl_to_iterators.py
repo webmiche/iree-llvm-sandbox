@@ -120,23 +120,24 @@ class LiteralRewriter(RelImplRewriter):
 
   @op_type_rewrite_pattern
   def match_and_rewrite(self, op: RelImpl.Literal, rewriter: PatternRewriter):
-    if isinstance(op.result.typ, RelImpl.Int32) or isinstance(
-        op.result.typ, RelImpl.Int64):
+    type = op.result.typ
+    if isinstance(type, RelImpl.Nullable):
+      type = type.type
+    if isinstance(type, RelImpl.Int32) or isinstance(type, RelImpl.Int64):
       rewriter.replace_matched_op(
           Constant.from_int_constant(op.value.value, op.value.typ))
-    elif isinstance(op.result.typ, RelImpl.Decimal):
+    elif isinstance(type, RelImpl.Decimal):
       rewriter.replace_matched_op(
           Constant.from_int_constant(int(Decimal(op.value.data) * Decimal(100)),
                                      32))
-    elif isinstance(op.result.typ, RelImpl.Timestamp):
+    elif isinstance(type, RelImpl.Timestamp):
       rewriter.replace_matched_op(
           Constant.from_int_constant(
               int((datetime64(op.value.data) - datetime64('1970-01-01')) //
                   timedelta64(1, 'D')), 32))
     else:
       raise Exception(
-          f"lowering of literals with type {type(op.result.typ)} not yet implemented"
-      )
+          f"lowering of literals with type {type(type)} not yet implemented")
 
 
 @dataclass
@@ -225,7 +226,8 @@ class BinOpRewriter(RelImplRewriter):
       rewriter.replace_matched_op(Addi.get(op.lhs, op.rhs))
       return
     if op.operator.data == "*":
-      rewriter.replace_matched_op(Muli.get(op.lhs, op.rhs))
+      rewriter.replace_matched_op(
+          Muli.build(operands=[op.lhs, op.rhs], result_types=[op.lhs.typ]))
       return
     if op.operator.data == "-":
       rewriter.replace_matched_op(Subi.get(op.lhs, op.rhs))
