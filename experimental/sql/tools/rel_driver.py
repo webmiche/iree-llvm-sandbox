@@ -4,8 +4,8 @@ import pandas as pd
 
 import ibis
 
-import python.mlir_iterators.runtime.iterators_executor as ie
-from python.mlir_iterators.runtime.pandas_to_iterators import to_columnar_batch_descriptor
+import mlir_iterators.runtime.iterators_executor as ie
+from mlir_iterators.runtime.pandas_to_iterators import to_columnar_batch_descriptor
 from src.ibis_frontend import ibis_to_xdsl
 from src.ibis_to_alg import ibis_to_alg
 from src.alg_to_ssa import alg_to_ssa

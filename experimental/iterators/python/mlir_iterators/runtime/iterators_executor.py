@@ -3,7 +3,7 @@ import ctypes
 import pandas as pd
 import numpy as np
 
-from python.mlir_iterators.runtime.pandas_to_iterators import to_columnar_batch_descriptor
+from mlir_iterators.runtime.pandas_to_iterators import to_columnar_batch_descriptor
 from mlir_iterators.dialects import iterators as it
 from mlir_iterators.ir import Context, Module
 from mlir_iterators.passmanager import PassManager
