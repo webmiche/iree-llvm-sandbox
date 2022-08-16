@@ -1,0 +1,102 @@
+import ctypes
+import numpy as np
+import pandas as pd
+
+import ibis
+
+import mlir_iterators.runtime.iterators_executor as ie
+from mlir_iterators.runtime.pandas_to_iterators import to_columnar_batch_descriptor
+from src.ibis_frontend import ibis_to_xdsl
+from src.ibis_to_alg import ibis_to_alg
+from src.alg_to_ssa import alg_to_ssa
+from src.ssa_to_impl import ssa_to_impl
+from src.impl_to_iterators import impl_to_iterators
+from tools.IteratorsMLIRConverter import IteratorsMLIRConverter
+
+from xdsl.ir import MLContext
+from xdsl.printer import Printer
+
+from decimal import Decimal
+
+
+def run(query, df: pd.DataFrame):
+
+  arg = ctypes.pointer(to_columnar_batch_descriptor(df))
+  ctx = MLContext()
+  mod = ibis_to_xdsl(ctx, query)
+  Printer().print_op(mod)
+  ibis_to_alg(ctx, mod)
+  Printer().print_op(mod)
+  alg_to_ssa(ctx, mod)
+  Printer().print_op(mod)
+  ssa_to_impl(ctx, mod)
+  Printer().print_op(mod)
+  impl_to_iterators(ctx, mod)
+
+  Printer().print_op(mod)
+  converter = IteratorsMLIRConverter(ctx)
+  mlir_module = converter.convert_module(mod)
+  mlir_string = str(mlir_module)
+
+  print(mlir_string)
+
+  ie.run(mlir_string, [arg])
+
+
+t = ibis.table([("QUANTITY", "int64"), ("EXTENDEDPRICE", "decimal(32, 2)"),
+                ("DISCOUNT", "decimal(32, 2)"), ("SHIPDATE", "timestamp")],
+               'lineitem')
+
+t2 = ibis.table([("im", "int64")], 'u')
+res = ibis.table([("revenue", "int64")], 'line')
+
+p1 = ibis.literal('1994-01-01', "timestamp")
+p1h = ibis.literal('1995-01-01', "timestamp")
+p2 = 0.06
+p3 = np.int64(24)
+
+filtered = t.filter(
+    (t['SHIPDATE'] >= p1) & (t['SHIPDATE'] < p1h) &
+    (t['DISCOUNT'] >= ibis.literal(Decimal("0.05"), "decimal(6, 2)")) &
+    (t['DISCOUNT'] <= ibis.literal(Decimal("0.07"), "decimal(6, 2)")) &
+    (t['QUANTITY'] < p3))
+
+multiply = filtered.projection(
+    (filtered['EXTENDEDPRICE'] * filtered['DISCOUNT']).name('im'))
+
+query = multiply.aggregate(multiply.im.sum().name('revenue'))
+
+lineitem = pd.read_table('/home/michel/MasterThesis/dbgen/lineitem.tbl',
+                         delimiter="|",
+                         names=[
+                             "ORDERKEY", "PARTKEY", "SUPPKEY", "LINENUMBER",
+                             "QUANTITY", "EXTENDEDPRICE", "DISCOUNT", "TAX",
+                             "RETURNFLAG", "LINESTATUS", "SHIPDATE",
+                             "COMMITDATE", "RECEIPTDATE", "SHIPINSTRUCT",
+                             "SHIPMODE", "COMMENT"
+                         ],
+                         dtype={
+                             'ORDERKEY': np.int64,
+                             "PARTKEY": np.int64,
+                             "SUPPKEY": np.int64,
+                             "LINENUMBER": np.int64,
+                             "QUANTITY": np.int64,
+                             "EXTENDEDPRICE": np.int64,
+                             "DISCOUNT": np.int64,
+                             "TAX": np.int64,
+                             "RETURNFLAG": str,
+                             "LINESTATUS": str,
+                             "SHIPDATE": np.int64,
+                             "COMMITDATE": np.int64,
+                             "RECEIPTDATE": np.int64,
+                             "SHIPINSTRUCT": str,
+                             "SHIPMODE": str,
+                             "COMMENT": str
+                         },
+                         infer_datetime_format=True,
+                         index_col=False)
+
+df = lineitem[['QUANTITY', 'EXTENDEDPRICE', 'DISCOUNT', 'SHIPDATE']]
+print(df.dtypes)
+
+run(query, df)
