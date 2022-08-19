@@ -259,6 +259,21 @@ class FullTableScanRewriter(RelImplRewriter):
 
 
 @dataclass
+class PartialTableScanRewriter(RelImplRewriter):
+
+  table_mapping: dict[str, it.ColumnarBatch]
+
+  @op_type_rewrite_pattern
+  def match_and_rewrite(self, op: RelImpl.PartialTableScanOp,
+                        rewriter: PatternRewriter):
+    rewriter.replace_matched_op(
+        it.ScanColumnarBatch.get(
+            self.table_mapping[op.table_name.data + "," +
+                               ",".join([s.data for s in op.cols.data])],
+            convert_bag(op.result.typ)))
+
+
+@dataclass
 class AggregateRewriter(RelImplRewriter):
 
   @op_type_rewrite_pattern
@@ -338,6 +353,16 @@ def get_batch_and_name_list(
           ]))
       batches.append(curr_batch)
       names.append(o.table_name.data)
+    if isinstance(o, RelImpl.PartialTableScanOp):
+      curr_batch = it.ColumnarBatch.get(
+          TupleType([
+              ArrayAttr.from_list([
+                  convert_datatype(e.elt_type) for e in o.result.typ.schema.data
+              ])
+          ]))
+      batches.append(curr_batch)
+      names.append(o.table_name.data + "," +
+                   ",".join([s.data for s in o.cols.data]))
 
   return batches, names
 
@@ -377,6 +402,7 @@ def impl_to_iterators(ctx: MLContext, query: ModuleOp):
   index_walker.rewrite_module(query)
   walker = PatternRewriteWalker(GreedyRewritePatternApplier([
       FullTableScanRewriter(table_mapping),
+      PartialTableScanRewriter(table_mapping),
       AggregateRewriter(),
       SelectRewriter(),
       LiteralRewriter(),
