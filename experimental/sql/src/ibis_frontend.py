@@ -103,6 +103,13 @@ def visit(  #type: ignore
   return id.UnboundTable.get(op.name, schema)
 
 
+@dispatch(ibis.backends.pandas.client.PandasTable)
+def visit(  #type: ignore
+    op: ibis.backends.pandas.client.PandasTable) -> Operation:
+  schema = visit_schema(op.schema)
+  return id.UnboundTable.get(op.name, schema)
+
+
 @dispatch(ibis.expr.operations.relations.Selection)
 def visit(  #type: ignore
     op: ibis.expr.operations.relations.Selection) -> Operation:

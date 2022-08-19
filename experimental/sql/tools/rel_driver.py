@@ -5,12 +5,14 @@ import pandas as pd
 import ibis
 
 import mlir_iterators.runtime.iterators_executor as ie
-from mlir_iterators.runtime.pandas_to_iterators import to_columnar_batch_descriptor
+from mlir_iterators.runtime.pandas_to_iterators import to_partial_columnar_batch_descriptor
 from src.ibis_frontend import ibis_to_xdsl
 from src.ibis_to_alg import ibis_to_alg
 from src.alg_to_ssa import alg_to_ssa
 from src.ssa_to_impl import ssa_to_impl
 from src.impl_to_iterators import impl_to_iterators
+from src.projection_pushdown import projection_pushdown
+from src.fuse_proj_table import fuse_proj_table
 from tools.IteratorsMLIRConverter import IteratorsMLIRConverter
 
 from xdsl.ir import MLContext
@@ -21,31 +23,31 @@ from decimal import Decimal
 
 def run(query, df: pd.DataFrame):
 
-  arg = ctypes.pointer(to_columnar_batch_descriptor(df))
   ctx = MLContext()
   mod = ibis_to_xdsl(ctx, query)
-  Printer().print_op(mod)
   ibis_to_alg(ctx, mod)
-  Printer().print_op(mod)
+  projection_pushdown(ctx, mod)
   alg_to_ssa(ctx, mod)
-  Printer().print_op(mod)
   ssa_to_impl(ctx, mod)
-  Printer().print_op(mod)
-  impl_to_iterators(ctx, mod)
+  fuse_proj_table(ctx, mod)
+  data = impl_to_iterators(ctx, mod)
 
-  Printer().print_op(mod)
   converter = IteratorsMLIRConverter(ctx)
   mlir_module = converter.convert_module(mod)
   mlir_string = str(mlir_module)
 
-  print(mlir_string)
-
+  arg = ctypes.pointer(to_partial_columnar_batch_descriptor(df, data[0]))
   ie.run(mlir_string, [arg])
 
 
-t = ibis.table([("QUANTITY", "int64"), ("EXTENDEDPRICE", "decimal(32, 2)"),
-                ("DISCOUNT", "decimal(32, 2)"), ("SHIPDATE", "timestamp")],
-               'lineitem')
+t = ibis.table([("ORDERKEY", "int64"), ("PARTKE", "int64"),
+                ("SUPPKEY", "int64"), ("LINENUMBER", "int64"),
+                ("QUANTITY", "int64"), ("EXTENDEDPRICE", "decimal(32, 2)"),
+                ("DISCOUNT", "decimal(32, 2)"), ("TAX", "decimal(32, 2)"),
+                ("RETURNFLAG", "string"), ("LINESTATUS", "string"),
+                ("SHIPDATE", "timestamp"), ("COMMITDATE", "timestamp"),
+                ("RECEIPTDATE", "timestamp"), ("SHIPINSTRUCT", "string"),
+                ("SHIPMODE", "string"), ("COMMENT", "string")], 'lineitem')
 
 t2 = ibis.table([("im", "int64")], 'u')
 res = ibis.table([("revenue", "int64")], 'line')
@@ -96,7 +98,4 @@ lineitem = pd.read_table('/home/michel/MasterThesis/dbgen/lineitem.tbl',
                          infer_datetime_format=True,
                          index_col=False)
 
-df = lineitem[['QUANTITY', 'EXTENDEDPRICE', 'DISCOUNT', 'SHIPDATE']]
-print(df.dtypes)
-
-run(query, df)
+run(query, lineitem)

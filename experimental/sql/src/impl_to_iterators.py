@@ -367,9 +367,21 @@ def get_batch_and_name_list(
   return batches, names
 
 
-def impl_to_iterators(ctx: MLContext, query: ModuleOp):
+def impl_to_iterators(ctx: MLContext, query: ModuleOp) -> list[list[str]]:
+  """
+  Return a list, where element i is the list of columns to load from the ith
+  argument to main. If an entry is None, load the whole table.
+  """
 
   batches, names = get_batch_and_name_list(query)
+
+  ret_list = []
+
+  for n in names:
+    if "," in n:
+      ret_list.append(n.split(",")[1:])
+    else:
+      ret_list.append(None)
 
   table_mapping = {}
 
@@ -416,3 +428,4 @@ def impl_to_iterators(ctx: MLContext, query: ModuleOp):
                                 apply_recursively=False,
                                 walk_reverse=False)
   walker.rewrite_module(query)
+  return ret_list
