@@ -5,11 +5,7 @@
 from dataclasses import dataclass
 from xdsl.ir import Operation, MLContext, Region, Block, Attribute
 from typing import List, Type, Optional, Tuple
-<<<<<<< HEAD
 from xdsl.dialects.builtin import ArrayAttr, StringAttr, ModuleOp, IntegerAttr, IntegerType, TupleType, UnitAttr
-=======
-from xdsl.dialects.builtin import ArrayAttr, StringAttr, ModuleOp, IntegerAttr, IntegerType, TupleType
->>>>>>> sql_iterators_runtime
 from xdsl.dialects.llvm import LLVMStructType, LLVMExtractValue, LLVMInsertValue, LLVMMLIRUndef
 from xdsl.dialects.func import FuncOp, Return
 from xdsl.dialects.arith import Addi, Constant, Cmpi, Muli, Subi, AndI
@@ -19,13 +15,8 @@ from xdsl.pattern_rewriter import RewritePattern, GreedyRewritePatternApplier, P
 import dialects.rel_impl as RelImpl
 import dialects.iterators as it
 from decimal import Decimal
-<<<<<<< HEAD
-from datetime import datetime, timezone
-from time import mktime
-=======
 from datetime import datetime
 from numpy import datetime64
->>>>>>> sql_iterators_runtime
 
 # This file contains the rewrite infrastructure to translate the relational
 # implementation dialect to the iterators dialect. The current design has a
@@ -142,24 +133,11 @@ class LiteralRewriter(RelImplRewriter):
           Constant.from_int_constant(int(Decimal(op.value.data) * Decimal(100)),
                                      64))
     elif isinstance(type, RelImpl.Timestamp):
-<<<<<<< HEAD
       epoch = datetime.utcfromtimestamp(0)
       rewriter.replace_matched_op(
           Constant.from_int_constant(
               int((datetime.strptime(op.value.data, "%Y-%m-%d") -
                    epoch).total_seconds()), 64))
-=======
-      import time
-      d = datetime64(op.value.data)
-      rewriter.replace_matched_op(
-          Constant.from_int_constant(
-              int(
-                  time.mktime(
-                      datetime(
-                          d.astype(object).year,
-                          d.astype(object).month,
-                          d.astype(object).day).timetuple())), 64))
->>>>>>> sql_iterators_runtime
     else:
       raise Exception(
           f"lowering of literals with type {type(type)} not yet implemented")
@@ -278,7 +256,6 @@ class FullTableScanRewriter(RelImplRewriter):
     rewriter.replace_matched_op(
         it.ScanColumnarBatch.get(self.table_mapping[op.table_name.data],
                                  convert_bag(op.result.typ)))
-<<<<<<< HEAD
 
 
 @dataclass
@@ -294,8 +271,6 @@ class PartialTableScanRewriter(RelImplRewriter):
             self.table_mapping[op.table_name.data + "," +
                                ",".join([s.data for s in op.cols.data])],
             convert_bag(op.result.typ)))
-=======
->>>>>>> sql_iterators_runtime
 
 
 @dataclass
@@ -360,7 +335,6 @@ class ProjectRewriter(RelImplRewriter):
 
 def get_batch_and_name_list(
     op: FuncOp) -> Tuple[list[str], list[it.ColumnarBatch]]:
-<<<<<<< HEAD
   """
   Scans over all the operations of a top-level function op and returns a list of
   the table_names and a list of the batches these tables correspond to.
@@ -371,12 +345,6 @@ def get_batch_and_name_list(
     if isinstance(
         o,
         RelImpl.FullTableScanOp) and not names.__contains__(o.table_name.data):
-=======
-  batches = []
-  names = []
-  for o in op.body.ops:
-    if isinstance(o, RelImpl.FullTableScanOp):
->>>>>>> sql_iterators_runtime
       curr_batch = it.ColumnarBatch.get(
           TupleType([
               ArrayAttr.from_list([
@@ -385,7 +353,6 @@ def get_batch_and_name_list(
           ]))
       batches.append(curr_batch)
       names.append(o.table_name.data)
-<<<<<<< HEAD
     if isinstance(o, RelImpl.PartialTableScanOp):
       curr_batch = it.ColumnarBatch.get(
           TupleType([
@@ -398,19 +365,11 @@ def get_batch_and_name_list(
                    ",".join([s.data for s in o.cols.data]))
 
   return batches, names
-=======
-
-  return names, batches
->>>>>>> sql_iterators_runtime
 
 
 def impl_to_iterators(ctx: MLContext, query: ModuleOp):
 
-<<<<<<< HEAD
   batches, names = get_batch_and_name_list(query)
-=======
-  names, batches = get_batch_and_name_list(query)
->>>>>>> sql_iterators_runtime
 
   table_mapping = {}
 
@@ -421,11 +380,7 @@ def impl_to_iterators(ctx: MLContext, query: ModuleOp):
   query.body.detach_block(0)
   f = FuncOp.from_region("main", batches, [],
                          Region.from_block_list([body_block]))
-<<<<<<< HEAD
   f.attributes['llvm.emit_c_interface'] = UnitAttr([])
-=======
-  f.attributes['llvm.emit_c_interface'] = None
->>>>>>> sql_iterators_runtime
   query.body.add_block(Block.from_ops([f]))
   # Populating a mapping from table names to BlockArguments
   for n, b in zip(names, f.body.blocks[0].args):
@@ -447,10 +402,7 @@ def impl_to_iterators(ctx: MLContext, query: ModuleOp):
   index_walker.rewrite_module(query)
   walker = PatternRewriteWalker(GreedyRewritePatternApplier([
       FullTableScanRewriter(table_mapping),
-<<<<<<< HEAD
       PartialTableScanRewriter(table_mapping),
-=======
->>>>>>> sql_iterators_runtime
       AggregateRewriter(),
       SelectRewriter(),
       LiteralRewriter(),
