@@ -590,11 +590,15 @@ class Aggregate(Operator):
             "functions":
                 ArrayAttr.from_list([StringAttr.from_str(f) for f in functions])
         },
+<<<<<<< HEAD
         result_types=[
             Bag.get(
                 [input.result.typ.lookup_type_in_schema(n) for n in col_names],
                 res_names)
         ])
+=======
+        result_types=[Bag.get([Int64()] * len(functions), res_names)])
+>>>>>>> sql_iterators_runtime
 
 
 @dataclass
