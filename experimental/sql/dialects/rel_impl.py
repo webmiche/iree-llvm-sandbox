@@ -437,7 +437,7 @@ class FullTableScanOp(Operator):
   Example:
 
   '''
-  %0 : rel_impl.bag<[!rel_impl.int32]> = rel_impl.full_table_scan() ["table_name" = "t"]
+  %0 : rel_impl.bag<[!rel_impl.schema_element<"a", !rel_impl.int32>]> = rel_impl.full_table_scan() ["table_name" = "t"]
   '''
   """
   name = "rel_impl.full_table_scan"
@@ -462,7 +462,7 @@ class PartialTableScanOp(Operator):
   Example:
 
   '''
-  %0 : rel_impl.bag<[!rel_impl.int32]> = rel_impl.partial_table_scan() ["table_name" = "t", "cols" = ["a"]] '''
+  %0 : rel_impl.bag<[!rel_impl.schema_element<"a", !rel_impl.int32>]> = rel_impl.partial_table_scan() ["table_name" = "t", "cols" = ["a"]] '''
   """
   name = "rel_impl.partial_table_scan"
 
