@@ -454,6 +454,33 @@ class FullTableScanOp(Operator):
 
 
 @irdl_op_definition
+class PartialTableScanOp(Operator):
+  """
+  Performs a partial table scan of the table `table_name` only scanning the
+  columns defined in `cols` and produces a bag with the given schema.
+
+  Example:
+
+  '''
+  %0 : rel_impl.bag<[!rel_impl.int32]> = rel_impl.partial_table_scan() ["table_name" = "t", "cols" = ["a"]] '''
+  """
+  name = "rel_impl.partial_table_scan"
+
+  table_name = AttributeDef(StringAttr)
+  result = ResultDef(Bag)
+  cols = AttributeDef(ArrayAttr)
+
+  @staticmethod
+  @builder
+  def get(name: str, result_type: Bag, cols: List[str]) -> 'PartialTableScanOp':
+    return PartialTableScanOp.create(attributes={
+        "table_name": StringAttr.from_str(name),
+        "cols": ArrayAttr.from_list([StringAttr.from_str(s) for s in cols])
+    },
+                                     result_types=[result_type])
+
+
+@irdl_op_definition
 class Select(Operator):
   """
   Selects all tuples of `input` according to the yielded expression in `predicates`.
@@ -591,6 +618,7 @@ class RelImpl:
     self.ctx.register_op(Project)
     self.ctx.register_op(Aggregate)
     self.ctx.register_op(FullTableScanOp)
+    self.ctx.register_op(PartialTableScanOp)
     self.ctx.register_op(Literal)
     self.ctx.register_op(Compare)
     self.ctx.register_op(IndexByName)
