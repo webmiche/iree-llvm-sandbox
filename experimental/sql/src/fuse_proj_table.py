@@ -44,9 +44,11 @@ class ProjTableFuser(RewritePattern):
         op.input.op.table_name.data, RelImpl.Bag.get(col_types, col_names),
         col_names)
     rewriter.replace_matched_op(new_op)
-    # TODO: remove that safe_erase is False, when we have some kind of dead code
-    # elimination.
-    rewriter.erase_op(op.input.op, safe_erase=False)
+
+    if len(op.input.uses) == 0:
+      # TODO: remove that safe_erase is False, when we have some kind of dead code
+      # elimination.
+      rewriter.erase_op(op.input.op, safe_erase=False)
 
 
 def fuse_proj_table(ctx: MLContext, query: ModuleOp):
