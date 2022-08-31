@@ -4,7 +4,10 @@ import pandas as pd
 
 import ibis
 
+from xdsl import _mlir_module as mlir
 import mlir_iterators.runtime.iterators_executor as ie
+from mlir_iterators.ir import Module, Context
+from mlir_iterators.dialects import iterators as it
 from mlir_iterators.runtime.pandas_to_iterators import to_partial_columnar_batch_descriptor
 from src.ibis_frontend import ibis_to_xdsl
 from src.ibis_to_alg import ibis_to_alg
@@ -20,9 +23,10 @@ from xdsl.printer import Printer
 
 from decimal import Decimal
 
+import time
 
-def run(query, df: pd.DataFrame):
 
+def compile(query, mlir_ctx):
   ctx = MLContext()
   mod = ibis_to_xdsl(ctx, query)
   ibis_to_alg(ctx, mod)
@@ -31,14 +35,23 @@ def run(query, df: pd.DataFrame):
   ssa_to_impl(ctx, mod)
   fuse_proj_table(ctx, mod)
   data = impl_to_iterators(ctx, mod)
-  print(data)
 
   converter = IteratorsMLIRConverter(ctx)
-  mlir_module = converter.convert_module(mod)
-  mlir_string = str(mlir_module)
+  return data, converter.convert_module_with_ctx(mod, mlir_ctx)
 
-  arg = ctypes.pointer(to_partial_columnar_batch_descriptor(df, data[0]))
-  ie.run(mlir_string, [arg])
+
+def run(query, df: pd.DataFrame):
+
+  with Context() as mlir_ctx:
+    it.register_dialect()
+    start = time.time()
+    data, mlir_module = compile(query, mlir_ctx)
+    print(time.time() - start)
+
+    arg = ctypes.pointer(to_partial_columnar_batch_descriptor(df, data[0]))
+    start = time.time()
+    ie.run(mlir_module, [arg])
+    print(time.time() - start)
 
 
 t = ibis.table([("ORDERKEY", "int64"), ("PARTKE", "int64"),
@@ -69,7 +82,7 @@ multiply = filtered.projection(
 
 query = multiply.aggregate(multiply.im.sum().name('revenue'))
 
-lineitem = pd.read_table('/home/michel/MasterThesis/dbgen/lineitem2.tbl',
+lineitem = pd.read_table('/home/michel/MasterThesis/dbgen/lineitem.tbl',
                          delimiter="|",
                          names=[
                              "ORDERKEY", "PARTKEY", "SUPPKEY", "LINENUMBER",

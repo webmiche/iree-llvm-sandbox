@@ -12,21 +12,15 @@ import mlir_iterators.all_passes_registration
 
 
 # inputs should be a list of ColumnarBatchDescriptors
-def run(f: str, inputs):
-  with Context():
-    it.register_dialect()
-    mod = Module.parse(f)
+def run(mod: Module, inputs):
+  pm = PassManager.parse(
+      'convert-iterators-to-llvm,convert-memref-to-llvm,convert-func-to-llvm,'
+      'reconcile-unrealized-casts,convert-scf-to-cf,convert-cf-to-llvm,convert-arith-to-llvm'
+  )
+  pm.run(mod)
 
-    pm = PassManager.parse(
-        'convert-iterators-to-llvm,convert-memref-to-llvm,convert-func-to-llvm,'
-        'reconcile-unrealized-casts,convert-scf-to-cf,convert-cf-to-llvm,convert-arith-to-llvm'
-    )
-    pm.run(mod)
-
-    print(mod)
-
-    engine = ExecutionEngine(mod)
-    engine.invoke('query', *inputs)
+  engine = ExecutionEngine(mod)
+  engine.invoke('query', *inputs)
 
 
 if __name__ == "__main__":
@@ -35,7 +29,7 @@ if __name__ == "__main__":
   arg = ctypes.pointer(to_columnar_batch_descriptor(df))
 
   run(
-      """
+      Module.parse("""
   !tuple_type = tuple<i32,i64>
           !struct_type = !llvm.struct<(i32,i64)>
           func.func @main(%input: !iterators.columnar_batch<!tuple_type>)
@@ -46,4 +40,4 @@ if __name__ == "__main__":
             "iterators.sink"(%stream) : (!iterators.stream<!struct_type>) -> ()
             return
            }
-           """, [arg])
+           """), [arg])
