@@ -19,11 +19,14 @@ def run(f: str, inputs):
 
     pm = PassManager.parse(
         'convert-iterators-to-llvm,convert-memref-to-llvm,convert-func-to-llvm,'
-        'reconcile-unrealized-casts,convert-scf-to-cf,convert-cf-to-llvm')
+        'reconcile-unrealized-casts,convert-scf-to-cf,convert-cf-to-llvm,convert-arith-to-llvm'
+    )
     pm.run(mod)
 
+    print(mod)
+
     engine = ExecutionEngine(mod)
-    engine.invoke('main', *inputs)
+    engine.invoke('query', *inputs)
 
 
 if __name__ == "__main__":

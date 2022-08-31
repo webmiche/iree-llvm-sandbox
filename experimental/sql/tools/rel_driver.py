@@ -31,6 +31,7 @@ def run(query, df: pd.DataFrame):
   ssa_to_impl(ctx, mod)
   fuse_proj_table(ctx, mod)
   data = impl_to_iterators(ctx, mod)
+  print(data)
 
   converter = IteratorsMLIRConverter(ctx)
   mlir_module = converter.convert_module(mod)
@@ -68,7 +69,7 @@ multiply = filtered.projection(
 
 query = multiply.aggregate(multiply.im.sum().name('revenue'))
 
-lineitem = pd.read_table('/home/michel/MasterThesis/dbgen/lineitem.tbl',
+lineitem = pd.read_table('/home/michel/MasterThesis/dbgen/lineitem2.tbl',
                          delimiter="|",
                          names=[
                              "ORDERKEY", "PARTKEY", "SUPPKEY", "LINENUMBER",
