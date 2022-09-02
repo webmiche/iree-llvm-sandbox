@@ -46,12 +46,12 @@ def run(query, df: pd.DataFrame):
     it.register_dialect()
     start = time.time()
     data, mlir_module = compile(query, mlir_ctx)
-    print(time.time() - start)
+    print("compilation time: " + str(time.time() - start))
 
     arg = ctypes.pointer(to_partial_columnar_batch_descriptor(df, data[0]))
     start = time.time()
     ie.run(mlir_module, [arg])
-    print(time.time() - start)
+    print("runtime: " + str(time.time() - start))
 
 
 t = ibis.table([("ORDERKEY", "int64"), ("PARTKE", "int64"),
