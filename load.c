@@ -7,23 +7,57 @@
 
 #define NR 32
 #define CYCLES_REQUIRED 1e10
-#define REP 50
+#define REP 1
 
 extern void query(int64_t, int64_t*, int64_t*, int64_t*, int64_t*);
 
-int main(void)
+int benchmark(int64_t scale_factor)
 {
+    int64_t row_count;
     FILE * fp;
     char* line = malloc(100);
     size_t len = 0;
     ssize_t read;
 
-    fp = fopen("/home/michel/MasterThesis/dbgen/lineitem.tbl", "r");
+    switch(scale_factor) {
+      case 1:
+        row_count = 6001215;
+        break;
+      case 2:
+        row_count = 11997996;
+        break;
+      case 3:
+        row_count = 17996609;
+        break;
+      case 4:
+        row_count = 23996604;
+        break;
+      case 5:
+        row_count = 29999795;
+        break;
+      case 6:
+        row_count = 36000148;
+        break;
+      case 7:
+        row_count = 41995307;
+        break;
+      case 8:
+        row_count = 47989007;
+        break;
+      case 9:
+        row_count = 53986608;
+        break;
+      case 10:
+        row_count = 59986052;
+        break;
+    }
+    char filename[47];
+    snprintf(filename, 47, "/home/michel/MasterThesis/dbgen/lineitem_%ld.tbl", scale_factor);
+    fp = fopen(filename, "r");
     if (fp == NULL)
         exit(EXIT_FAILURE);
     char delim = '|';
 
-    int64_t row_count = 6001215;
     int64_t* shipdate = (int64_t*) malloc(row_count * sizeof(int64_t));
     int64_t* discount = (int64_t*) malloc(row_count * sizeof(int64_t));
     int64_t* quantity = (int64_t*) malloc(row_count * sizeof(int64_t));
@@ -51,33 +85,32 @@ int main(void)
 
     double start;
     double end;
-    double multiplier = 1;
+    // double multiplier = 1;
     double cycles = 0;
     int64_t num_runs = 100;
-    do {
-      num_runs = num_runs * multiplier;
-      start = start_tsc();
-      for (size_t i = 0; i < num_runs; i++) {
-          query(row_count, shipdate, discount, quantity, extendedprice);
-      }
-      end = stop_tsc(start);
-      printf("%lf\n", end);
-      printf("%ld\n", num_runs);
-      printf("%lf\n", multiplier);
+    // do {
+    //   num_runs = num_runs * multiplier;
+    //   start = start_tsc();
+    //   for (size_t i = 0; i < num_runs; i++) {
+    //       query(row_count, shipdate, discount, quantity, extendedprice);
+    //   }
+    //   end = stop_tsc(start);
 
-      cycles = (double)end;
-      multiplier = (CYCLES_REQUIRED) / (cycles);
-    } while(multiplier < 2);
+    //   cycles = (double)end;
+    //   multiplier = (CYCLES_REQUIRED) / (cycles);
+    // } while(multiplier < 2);
 
 
     double total_cycles = 0;
+    printf("%ld\n", scale_factor);
     for (size_t j = 0; j < REP; j++) {
 
-        start = start_tsc();
         for (size_t i = 0; i < num_runs; ++i) {
+          start = start_tsc();
           query(row_count, shipdate, discount, quantity, extendedprice);
+          end = stop_tsc(start);
+          printf("%lf\n", ((double)end)/2.3e9);
         }
-        end = stop_tsc(start);
 
         cycles = ((double)end) / num_runs;
         total_cycles += cycles;
@@ -85,7 +118,6 @@ int main(void)
     }
     total_cycles /= REP;
 
-    printf("%lf\n", total_cycles/2.3e9);
 
 
     free(shipdate);
@@ -95,5 +127,11 @@ int main(void)
     fclose(fp);
     if (line)
         free(line);
-    exit(EXIT_SUCCESS);
+    return 0;
+}
+
+int main(void) {
+  for(int i = 1; i <= 10; i++)
+    benchmark(i);
+  return 0;
 }
