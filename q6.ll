@@ -12,7 +12,7 @@ declare i8* @malloc(i64)
 
 declare void @free(i8*)
 
-declare i32 @printf(i8*, ...)
+declare i32 @printf2(i8*, ...)
 
 define %iterators.reduce_state @iterators.reduce.close.0(%iterators.reduce_state %0) !dbg !3 {
   %2 = extractvalue %iterators.reduce_state %0, 0, !dbg !7
@@ -238,16 +238,17 @@ define void @query({ i64, i64*, i64*, i64*, i64* } %0) !dbg !144 {
   %10 = extractvalue { %iterators.reduce_state, i1, { i64 } } %9, 0, !dbg !153
   %11 = extractvalue { %iterators.reduce_state, i1, { i64 } } %9, 1, !dbg !154
   %12 = extractvalue { %iterators.reduce_state, i1, { i64 } } %9, 2, !dbg !155
-  br i1 %11, label %13, label %17, !dbg !156
+  br i1 %11, label %13, label %18, !dbg !156
 
 13:                                               ; preds = %7
   %14 = phi %iterators.reduce_state [ %10, %7 ]
   %15 = phi { i64 } [ %12, %7 ]
   %16 = extractvalue { i64 } %15, 0, !dbg !157
+  %17 = call i32 (i8*, ...) @printf2(i8* getelementptr inbounds ([8 x i8], [8 x i8]* @frmt_spec.anonymous_tuple, i64 0, i64 0), i64 %16), !dbg !158
   br label %7, !dbg !159
 
-17:                                               ; preds = %7
-  %18 = call %iterators.reduce_state @iterators.reduce.close.0(%iterators.reduce_state %10), !dbg !160
+18:                                               ; preds = %7
+  %19 = call %iterators.reduce_state @iterators.reduce.close.0(%iterators.reduce_state %10), !dbg !160
   ret void, !dbg !161
 }
 
