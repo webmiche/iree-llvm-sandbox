@@ -82,7 +82,7 @@ multiply = filtered.projection(
 
 query = multiply.aggregate(multiply.im.sum().name('revenue'))
 
-lineitem = pd.read_table('/home/michel/MasterThesis/dbgen/lineitem.tbl',
+lineitem = pd.read_table('/home/michel/MasterThesis/dbgen/lineitem_1.tbl',
                          delimiter="|",
                          names=[
                              "ORDERKEY", "PARTKEY", "SUPPKEY", "LINENUMBER",
