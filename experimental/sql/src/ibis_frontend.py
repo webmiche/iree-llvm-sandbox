@@ -33,6 +33,8 @@ def convert_datatype(type_: ibis.expr.datatypes) -> id.DataType:
     ret_type = id.Int64()
   elif isinstance(type_, ibis.expr.datatypes.Float64):
     ret_type = id.Float64()
+  elif isinstance(type_, ibis.expr.datatypes.Int8):
+    ret_type = id.Int64()
   elif isinstance(type_, ibis.expr.datatypes.Timestamp):
     ret_type = id.Timestamp()
   elif isinstance(type_, ibis.expr.datatypes.Decimal):
@@ -55,6 +57,8 @@ def convert_literal(literal) -> Attribute:
   if isinstance(literal, int):
     # np.int64 are parsed as int by ibis
     return IntegerAttr.from_int_and_width(literal, 64)
+  if isinstance(literal, float):
+    return IntegerAttr.from_int_and_width(0, 64)
   if isinstance(literal, Decimal):
     return StringAttr.from_str(str(literal))
   raise Exception(f"literal conversion not yet implemented for {type(literal)}")
@@ -118,6 +122,134 @@ def visit(op: ibis.expr.operations.numeric.Divide):
                        convert_datatype(op.output_dtype()))
 
 
+@dispatch(ibis.expr.operations.reductions.Mean)
+def visit(op):
+  arg = Region.from_operation_list([visit(op.arg)])
+  return id.Sum.get(arg)
+
+
+@dispatch(ibis.expr.operations.reductions.Count)
+def visit(op):
+  arg = Region.from_operation_list([visit(op.arg)])
+  return id.Sum.get(arg)
+
+
+@dispatch(ibis.expr.operations.relations.Limit)
+def visit(op):
+  print("m")
+  return visit(op.args[0])
+
+
+@dispatch(ibis.expr.operations.strings.StringSQLLike)
+def visit(op):
+  print("h")
+  return id.Literal.get(IntegerAttr.from_int_and_width(0, 64), id.Int64())
+
+
+@dispatch(ibis.expr.operations.generic.TableArrayView)
+def visit(op):
+  print("h")
+  return visit(op.table)
+
+
+@dispatch(ibis.expr.operations.reductions.Min)
+def visit(op):
+  arg = Region.from_operation_list([visit(op.arg)])
+  return id.Sum.get(arg)
+
+
+@dispatch(ibis.expr.operations.reductions.Max)
+def visit(op):
+  arg = Region.from_operation_list([visit(op.arg)])
+  return id.Sum.get(arg)
+
+
+@dispatch(ibis.expr.operations.reductions.CountDistinct)
+def visit(op):
+  arg = Region.from_operation_list([visit(op.arg)])
+  return id.Sum.get(arg)
+
+
+@dispatch(ibis.expr.operations.relations.SelfReference)
+def visit(op):
+  print("h")
+  return visit(op.table)
+
+
+@dispatch(ibis.expr.operations.generic.Cast)
+def visit(op):
+  raise Exception("Cast")
+
+
+@dispatch(ibis.expr.operations.logical.Between)
+def visit(op):
+  print("m")
+  left_reg = Region.from_operation_list([visit(op.lower_bound)])
+  right_reg = Region.from_operation_list([visit(op.upper_bound)])
+  return id.Equals.get(left_reg, right_reg)
+
+
+@dispatch(ibis.expr.operations.strings.Substring)
+def visit(op):
+  print("m")
+  left_reg = Region.from_operation_list([visit(op.arg)])
+  right_reg = Region.from_operation_list([visit(op.start)])
+  return id.Equals.get(left_reg, right_reg)
+
+
+@dispatch(ibis.expr.operations.logical.Greater)
+def visit(op):
+  left_reg = Region.from_operation_list([visit(op.left)])
+  right_reg = Region.from_operation_list([visit(op.right)])
+  return id.Equals.get(left_reg, right_reg)
+
+
+@dispatch(ibis.expr.operations.logical.Contains)
+def visit(op):
+  print("m")
+  arg = Region.from_operation_list([visit(op.value)])
+  return id.Sum.get(arg)
+
+
+@dispatch(ibis.expr.operations.logical.NotExistsSubquery)
+def visit(op):
+  print("h")
+  return visit(op.foreign_table)
+
+
+@dispatch(ibis.expr.operations.logical.Not)
+def visit(op):
+  print("s")
+  arg = Region.from_operation_list([visit(op.arg)])
+  return id.Sum.get(arg)
+
+
+@dispatch(ibis.expr.operations.generic.SearchedCase)
+def visit(op):
+  print("h")
+  return visit(op.cases[0])
+
+
+@dispatch(ibis.expr.operations.generic.SimpleCase)
+def visit(op):
+  print("m")
+  return visit(op.base)
+
+
+@dispatch(ibis.expr.operations.relations.LeftJoin)
+def visit(op):
+  print("s")
+  cart_prod = id.CartesianProduct.get(
+      Region.from_operation_list([visit(op.left)]),
+      Region.from_operation_list([visit(op.right)]))
+  if op.predicates:
+    return id.Selection.get(Region.from_operation_list([cart_prod]),
+                            visit_ibis_expr_list(op.predicates),
+                            Region.from_operation_list([]),
+                            Region.from_operation_list([]), [])
+  return cart_prod
+
+
 @dispatch(ibis.expr.operations.core.Alias)
 def visit(  #type: ignore
     op: ibis.expr.operations.core.Alias) -> Operation:
@@ -161,7 +293,8 @@ def visit(  #type: ignore
   assert (op.inputs[0] is op.table)
   names = []
   if len(op.inputs) > 0:
-    names = [n.get_name() for n in op.inputs[1]]
+    names = op.schema.names
+    #names = [n.get_name() for n in op.inputs[1]]
   table = Region.from_operation_list([visit(op.table)])
   predicates = visit_ibis_expr_list(op.predicates)
   projections = visit_ibis_expr_list(op.selections)
