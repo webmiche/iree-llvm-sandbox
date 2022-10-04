@@ -34,27 +34,6 @@ from xdsl.printer import Printer
 import sys
 from io import StringIO
 
-from src.impl_to_iterators import get_batch_and_name_list
-
-
-def get_list(ctx, query) -> list[list[str]]:
-  """
-  Return a list, where element i is the list of columns to load from the ith
-  argument to main. If an entry is None, load the whole table.
-  """
-
-  batches, names = get_batch_and_name_list(query)
-
-  ret_list = []
-
-  for n in names:
-    if "," in n:
-      ret_list.append(n.split(",")[1:])
-    else:
-      ret_list.append(None)
-
-  return ret_list
-
 
 def compile(query):
   ctx = MLContext()
@@ -100,14 +79,14 @@ def get_tpc_queries():
 
 
 def run():
-  #_stdout = sys.stdout
-  #sys.stdout = s = StringIO()
+  _stdout = sys.stdout
+  sys.stdout = s = StringIO()
   for i, q in enumerate(get_tpc_queries()):
     print(i + 1)
     compile(q)
-  #l = s.getvalue().splitlines()
-  #sys.stdout = _stdout
-  #return l
+  l = s.getvalue().splitlines()
+  sys.stdout = _stdout
+  return l
 
 
 def parse_data(f: str):
@@ -126,15 +105,9 @@ def parse_data(f: str):
 
 def evaluate():
   lists = parse_data(run())
-  handled = 0
   for i, l in enumerate(lists):
-    if l == []:
-      handled += 1
-    else:
-      print(i + 1)
-      print(l)
-  print()
-  print(f"Handled: {handled}")
+    print(i + 1)
+    print(l)
 
 
 if __name__ == "__main__":
