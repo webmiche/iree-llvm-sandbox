@@ -34,6 +34,27 @@ from xdsl.printer import Printer
 import sys
 from io import StringIO
 
+from src.impl_to_iterators import get_batch_and_name_list
+
+
+def get_list(ctx, query) -> list[list[str]]:
+  """
+  Return a list, where element i is the list of columns to load from the ith
+  argument to main. If an entry is None, load the whole table.
+  """
+
+  batches, names = get_batch_and_name_list(query)
+
+  ret_list = []
+
+  for n in names:
+    if "," in n:
+      ret_list.append(n.split(",")[1:])
+    else:
+      ret_list.append(None)
+
+  return ret_list
+
 
 def compile(query):
   ctx = MLContext()
@@ -43,6 +64,8 @@ def compile(query):
   alg_to_ssa(ctx, mod)
   ssa_to_impl(ctx, mod)
   fuse_proj_into_scan(ctx, mod)
+  l = get_list(ctx, mod)
+  print(l)
 
   return mod
 
