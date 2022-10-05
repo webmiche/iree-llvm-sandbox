@@ -39,11 +39,10 @@ def compile(query):
   ctx = MLContext()
   mod = ibis_to_xdsl(ctx, query)
   ibis_to_alg(ctx, mod)
-  #projection_pushdown(ctx, mod)
+  projection_pushdown(ctx, mod)
   alg_to_ssa(ctx, mod)
   ssa_to_impl(ctx, mod)
   fuse_proj_into_scan(ctx, mod)
-  Printer().print_op(mod)
 
   return mod
 
