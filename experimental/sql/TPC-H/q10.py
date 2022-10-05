@@ -11,8 +11,8 @@ def get_ibis_query(DATE="1993-10-01"):
   q = q.join(nation, customer.c_nationkey == nation.n_nationkey)
 
   q = q.filter([
-      q.o_orderdate >= DATE,
-      q.o_orderdate < add_date(DATE, dm=3),
+      q.o_orderdate >= ibis.literal(DATE, "timestamp"),
+      q.o_orderdate < ibis.literal(add_date(DATE, dm=3), "timestamp"),
       q.l_returnflag == "R",
   ])
 

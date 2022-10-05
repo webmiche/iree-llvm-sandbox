@@ -1,7 +1,8 @@
 import ibis
 
 
-def get_ibis_query(MKTSEGMENT="BUILDING", DATE="1995-03-15"):
+def get_ibis_query(MKTSEGMENT="BUILDING",
+                   DATE=ibis.literal("1995-03-15", "timestamp")):
   from tpc_h_tables import lineitem, customer, orders
 
   q = customer.join(orders, customer.c_custkey == orders.o_custkey)

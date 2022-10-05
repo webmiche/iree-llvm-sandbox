@@ -17,7 +17,7 @@ def get_ibis_query(NATION="GERMANY", FRACTION=0.0001):
   innerproj = innerq.projection(innerq.columns +
                                 [(innerq.ps_supplycost *
                                   innerq.ps_availqty).name('total')])
-  innerq = innerproj.aggregate(total=innerproj.total.sum())
+  innerq = innerproj.aggregate(innerproj.total.sum().name('total'))
 
   proj = q.projection(q.columns +
                       [(q.ps_supplycost * q.ps_availqty).name('value')])
