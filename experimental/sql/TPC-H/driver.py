@@ -105,9 +105,15 @@ def parse_data(f: str):
 
 def evaluate():
   lists = parse_data(run())
+  handled = 0
   for i, l in enumerate(lists):
-    print(i + 1)
-    print(l)
+    if l == []:
+      handled += 1
+    else:
+      print(i + 1)
+      print(l)
+  print()
+  print(f"Handled: {handled}")
 
 
 if __name__ == "__main__":
