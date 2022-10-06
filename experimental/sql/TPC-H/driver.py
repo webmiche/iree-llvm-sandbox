@@ -64,8 +64,10 @@ def compile(query):
   alg_to_ssa(ctx, mod)
   ssa_to_impl(ctx, mod)
   fuse_proj_into_scan(ctx, mod)
-  l = get_list(ctx, mod)
-  print(l)
+  lists = get_list(ctx, mod)
+  for l in lists:
+    for elem in l:
+      print(elem)
 
   return mod
 
