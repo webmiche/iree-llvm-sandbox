@@ -125,7 +125,9 @@ def visit(op: ibis.expr.operations.numeric.Divide):
 @dispatch(ibis.expr.operations.strings.StringSQLLike)
 def visit(op):
   print("strlike")
-  return id.Literal.get(IntegerAttr.from_int_and_width(0, 64), id.Int64())
+  left_reg = Region.from_operation_list([visit(op.arg)])
+  right_reg = Region.from_operation_list([visit(op.pattern)])
+  return id.Equals.get(left_reg, right_reg)
 
 
 @dispatch(ibis.expr.operations.generic.TableArrayView)
@@ -136,7 +138,7 @@ def visit(op):
 
 @dispatch(ibis.expr.operations.relations.SelfReference)
 def visit(op):
-  print("selfRef")
+  print("selfJoin")
   return visit(op.table)
 
 
@@ -148,6 +150,7 @@ def visit(op):
 @dispatch(ibis.expr.operations.logical.Between)
 def visit(op):
   print("between")
+  visit(op.arg)
   left_reg = Region.from_operation_list([visit(op.lower_bound)])
   right_reg = Region.from_operation_list([visit(op.upper_bound)])
   return id.Equals.get(left_reg, right_reg)
@@ -158,19 +161,29 @@ def visit(op):
   print("substr")
   left_reg = Region.from_operation_list([visit(op.arg)])
   right_reg = Region.from_operation_list([visit(op.start)])
+  right_reg = Region.from_operation_list([visit(op.length)])
   return id.Equals.get(left_reg, right_reg)
+
+
+@dispatch(ibis.expr.operations.generic.ValueList)
+def visit(op):
+  print("ValueList")
+  visit_ibis_expr_list(op.values)
+  return None
 
 
 @dispatch(ibis.expr.operations.logical.Contains)
 def visit(op):
-  print("cont")
+  print("SemiJoin")
+  visit(op.options)
   arg = Region.from_operation_list([visit(op.value)])
   return id.Sum.get(arg)
 
 
 @dispatch(ibis.expr.operations.logical.NotExistsSubquery)
 def visit(op):
-  print("notexists")
+  print("antiJoin")
+  visit(op.predicates[0])
   return visit(op.foreign_table)
 
 
@@ -190,12 +203,14 @@ def visit(op):
 @dispatch(ibis.expr.operations.generic.SimpleCase)
 def visit(op):
   print("simpleCase")
+  visit_ibis_expr_list(op.cases)
+  visit_ibis_expr_list(op.results)
   return visit(op.base)
 
 
 @dispatch(ibis.expr.operations.relations.LeftJoin)
 def visit(op):
-  print("leftJoin")
+  print("leftOuterJoin")
   cart_prod = id.CartesianProduct.get(
       Region.from_operation_list([visit(op.left)]),
       Region.from_operation_list([visit(op.right)]))
