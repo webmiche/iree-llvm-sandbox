@@ -107,13 +107,9 @@ def evaluate():
   lists = parse_data(run())
   handled = 0
   for i, l in enumerate(lists):
-    if l == []:
-      handled += 1
-    else:
-      print(i + 1)
-      print(l)
-  print()
-  print(f"Handled: {handled}")
+    print(i + 1)
+    for e in l:
+      print(e)
 
 
 if __name__ == "__main__":

@@ -96,6 +96,7 @@ def visit(op) -> Operation:
 @dispatch(ibis.expr.operations.numeric.Multiply)
 def visit(  # type: ignore
     op: ibis.expr.operations.numeric.Multiply) -> Operation:
+  print("Mul")
   return id.Multiply.get(Region.from_operation_list([visit(op.left)]),
                          Region.from_operation_list([visit(op.right)]),
                          convert_datatype(op.output_dtype()))
@@ -103,6 +104,7 @@ def visit(  # type: ignore
 
 @dispatch(ibis.expr.operations.numeric.Subtract)
 def visit(op: ibis.expr.operations.numeric.Subtract):
+  print("Sub")
   return id.Subtract.get(Region.from_operation_list([visit(op.left)]),
                          Region.from_operation_list([visit(op.right)]),
                          convert_datatype(op.output_dtype()))
@@ -110,6 +112,7 @@ def visit(op: ibis.expr.operations.numeric.Subtract):
 
 @dispatch(ibis.expr.operations.numeric.Add)
 def visit(op: ibis.expr.operations.numeric.Add):
+  print("Add")
   return id.Add.get(Region.from_operation_list([visit(op.left)]),
                     Region.from_operation_list([visit(op.right)]),
                     convert_datatype(op.output_dtype()))
@@ -117,6 +120,7 @@ def visit(op: ibis.expr.operations.numeric.Add):
 
 @dispatch(ibis.expr.operations.numeric.Divide)
 def visit(op: ibis.expr.operations.numeric.Divide):
+  print("Divide")
   return id.Divide.get(Region.from_operation_list([visit(op.left)]),
                        Region.from_operation_list([visit(op.right)]),
                        convert_datatype(op.output_dtype()))
@@ -237,12 +241,14 @@ def visit(  #type: ignore
 @dispatch(ibis.expr.operations.relations.UnboundTable)
 def visit(  #type: ignore
     op: ibis.expr.operations.relations.UnboundTable) -> Operation:
+  print("UnboundTable")
   schema = visit_schema(op.schema)
   return id.UnboundTable.get(op.name, schema)
 
 
 @dispatch(ibis.expr.operations.relations.InnerJoin)
 def visit(op: ibis.expr.operations.relations.InnerJoin) -> Operation:
+  print("InnerJoin")
   cart_prod = id.CartesianProduct.get(
       Region.from_operation_list([visit(op.left)]),
       Region.from_operation_list([visit(op.right)]))
@@ -256,12 +262,14 @@ def visit(op: ibis.expr.operations.relations.InnerJoin) -> Operation:
 
 @dispatch(ibis.expr.operations.relations.Limit)
 def visit(op: ibis.expr.operations.relations.Limit) -> Operation:
+  print("Limit")
   return id.Limit.get(Region.from_operation_list([visit(op.table)]), op.n)
 
 
 @dispatch(ibis.expr.operations.relations.Selection)
 def visit(  #type: ignore
     op: ibis.expr.operations.relations.Selection) -> Operation:
+  print("Select")
   assert (op.inputs[0] is op.table)
   names = []
   if len(op.inputs) > 0:
@@ -284,6 +292,7 @@ def visit(op):
 
 @dispatch(ibis.expr.operations.sortkeys.SortKey)
 def visit(op: ibis.expr.operations.sortkeys.SortKey) -> Operation:
+  print("SortKey")
   return id.SortKey.get(Region.from_operation_list([visit(op.expr)]),
                         op.ascending)
 
@@ -291,6 +300,7 @@ def visit(op: ibis.expr.operations.sortkeys.SortKey) -> Operation:
 @dispatch(ibis.expr.operations.relations.Aggregation)
 def visit(  #type: ignore
     op: ibis.expr.operations.relations.Aggregation) -> Operation:
+  print("Aggregate")
   table = Region.from_operation_list([visit(op.table)])
   metrics = visit_ibis_expr_list(op.metrics)
   by = visit_ibis_expr_list(op.by)
@@ -303,6 +313,7 @@ def visit(  #type: ignore
 @dispatch(ibis.expr.operations.generic.TableColumn)
 def visit(  #type: ignore
     op: ibis.expr.operations.generic.TableColumn) -> Operation:
+  print("Column")
   table = Region.from_operation_list([visit(op.table)])
   return id.TableColumn.get(table, op.name)
 
@@ -317,42 +328,49 @@ def create_logical_op(op: ibis.expr.operations.Comparison,
 @dispatch(ibis.expr.operations.logical.Equals)
 def visit(  #type: ignore
     op: ibis.expr.operations.logical.Equals) -> Operation:
+  print("Eq")
   return create_logical_op(op, id.Equals)
 
 
 @dispatch(ibis.expr.operations.logical.GreaterEqual)
 def visit(  #type: ignore
     op: ibis.expr.operations.logical.GreaterEqual) -> Operation:
+  print("Ge")
   return create_logical_op(op, id.GreaterEqual)
 
 
 @dispatch(ibis.expr.operations.logical.Greater)
 def visit(  #type: ignore
     op: ibis.expr.operations.logical.Greater) -> Operation:
+  print("Gt")
   return create_logical_op(op, id.GreaterThan)
 
 
 @dispatch(ibis.expr.operations.logical.LessEqual)
 def visit(  #type: ignore
     op: ibis.expr.operations.logical.LessEqual) -> Operation:
+  print("Le")
   return create_logical_op(op, id.LessEqual)
 
 
 @dispatch(ibis.expr.operations.logical.Less)
 def visit(  #type: ignore
     op: ibis.expr.operations.logical.Less) -> Operation:
+  print("Lt")
   return create_logical_op(op, id.LessThan)
 
 
 @dispatch(ibis.expr.operations.generic.Literal)
 def visit(  #type: ignore
     op: ibis.expr.operations.generic.Literal) -> Operation:
+  print("Lit")
   return id.Literal.get(convert_literal(op.value), convert_datatype(op.dtype))
 
 
 @dispatch(ibis.expr.operations.reductions.Sum)
 def visit(  #type: ignore
     op: ibis.expr.operations.reductions.Sum) -> Operation:
+  print("sum")
   arg = Region.from_operation_list([visit(op.arg)])
   return id.Sum.get(arg)
 
@@ -360,6 +378,7 @@ def visit(  #type: ignore
 @dispatch(ibis.expr.operations.reductions.Mean)
 def visit(  #type: ignore
     op: ibis.expr.operations.reductions.Mean) -> Operation:
+  print("mean")
   arg = Region.from_operation_list([visit(op.arg)])
   return id.Mean.get(arg)
 
@@ -367,6 +386,7 @@ def visit(  #type: ignore
 @dispatch(ibis.expr.operations.reductions.Max)
 def visit(  #type: ignore
     op: ibis.expr.operations.reductions.Max) -> Operation:
+  print("max")
   arg = Region.from_operation_list([visit(op.arg)])
   return id.Max.get(arg)
 
@@ -375,12 +395,14 @@ def visit(  #type: ignore
 def visit(  #type: ignore
     op: ibis.expr.operations.reductions.Min) -> Operation:
   arg = Region.from_operation_list([visit(op.arg)])
+  print("min")
   return id.Min.get(arg)
 
 
 @dispatch(ibis.expr.operations.reductions.Count)
 def visit(  #type: ignore
     op: ibis.expr.operations.reductions.Count) -> Operation:
+  print("count")
   arg = Region.from_operation_list([visit(op.arg)])
   return id.Count.get(arg)
 
@@ -388,6 +410,7 @@ def visit(  #type: ignore
 @dispatch(ibis.expr.operations.reductions.CountDistinct)
 def visit(  #type: ignore
     op: ibis.expr.operations.reductions.CountDistinct) -> Operation:
+  print("count_distinct")
   arg = Region.from_operation_list([visit(op.arg)])
   return id.CountDistinct.get(arg)
 
