@@ -197,17 +197,30 @@ class CartesianProductRewriter(IbisRewriter):
 @dataclass
 class AggregationRewriter(IbisRewriter):
 
+  count: int = 0
+
   def get_col_name_and_function(self, metric_op: Operation) -> Tuple[str, str]:
+    name = ""
+    if isinstance(metric_op, ibis.Sum) or isinstance(
+        metric_op, ibis.Min) or isinstance(metric_op, ibis.Max) or isinstance(
+            metric_op,
+            ibis.Mean) or isinstance(metric_op, ibis.Sum) or isinstance(
+                metric_op, ibis.CountDistinct):
+      if isinstance(metric_op.arg.op, ibis.TableColumn):
+        name = metric_op.arg.op.attributes["col_name"].data
+      else:
+        name = "_p" + str(self.count)
+        self.count = self.count + 1
     if isinstance(metric_op, ibis.Sum):
-      return "sum", metric_op.arg.op.attributes["col_name"].data
+      return "sum", name
     if isinstance(metric_op, ibis.Min):
-      return "min", metric_op.arg.op.attributes["col_name"].data
+      return "min", name
     if isinstance(metric_op, ibis.Max):
-      return "max", metric_op.arg.op.attributes["col_name"].data
+      return "max", name
     if isinstance(metric_op, ibis.Mean):
-      return "avg", metric_op.arg.op.attributes["col_name"].data
+      return "avg", name
     if isinstance(metric_op, ibis.CountDistinct):
-      return "count_distinct", metric_op.arg.op.attributes["col_name"].data
+      return "count_distinct", name
     if isinstance(metric_op, ibis.Count):
       if isinstance(metric_op.arg.op, ibis.TableColumn):
         return "count", metric_op.arg.op.attributes["col_name"].data
@@ -225,10 +238,19 @@ class AggregationRewriter(IbisRewriter):
 
     by = [o.col_name.data for o in op.by.ops]
 
+    input = None
+    if any([c != "" and c[0] == "_" for c in col_names]):
+      proj = RelAlg.Project.get(
+          rewriter.move_region_contents_to_new_regions(op.table),
+          Region.from_operation_list([o.arg.op.clone() for o in op.metrics.ops
+                                     ]),
+          ArrayAttr.from_list([StringAttr.from_str(c) for c in col_names]))
+      input = Region.from_operation_list([proj])
+    else:
+      input = rewriter.move_region_contents_to_new_regions(op.table)
     rewriter.replace_matched_op(
-        RelAlg.Aggregate.get(
-            rewriter.move_region_contents_to_new_regions(op.table), col_names,
-            functions, [r.data for r in op.names.data], by))
+        RelAlg.Aggregate.get(input, col_names, functions,
+                             [r.data for r in op.names.data], by))
 
 
 @dataclass
