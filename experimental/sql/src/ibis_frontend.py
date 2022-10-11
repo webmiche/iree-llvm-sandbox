@@ -146,6 +146,15 @@ def visit(op):
   return visit(op.table)
 
 
+@dispatch(ibis.expr.operations.logical.ExistsSubquery)
+def visit(op):
+  print("SemiJoin")
+  visit(op.predicates[0])
+  visit(op.predicates[1])
+  arg = Region.from_operation_list([visit(op.foreign_table)])
+  return id.Sum.get(arg)
+
+
 @dispatch(ibis.expr.operations.generic.Cast)
 def visit(op):
   raise Exception("Cast")
@@ -178,7 +187,7 @@ def visit(op):
 
 @dispatch(ibis.expr.operations.logical.Contains)
 def visit(op):
-  print("SemiJoin")
+  print("Contains")
   visit(op.options)
   arg = Region.from_operation_list([visit(op.value)])
   return id.Sum.get(arg)
@@ -304,10 +313,35 @@ def visit(  #type: ignore
   table = Region.from_operation_list([visit(op.table)])
   metrics = visit_ibis_expr_list(op.metrics)
   by = visit_ibis_expr_list(op.by)
+  visit_ibis_expr_list(op.predicates)
   names = []
   if len(op.inputs) > 0:
     names = [n.get_name() for n in op.inputs[1]]
   return id.Aggregation.get(table, metrics, by, names)
+
+
+@dispatch(ibis.expr.operations.logical.And)
+def visit(op):
+  print("and")
+  left_reg = Region.from_operation_list([visit(op.left)])
+  right_reg = Region.from_operation_list([visit(op.right)])
+  return id.Equals.get(left_reg, right_reg)
+
+
+@dispatch(ibis.expr.operations.logical.Or)
+def visit(op):
+  print("or")
+  left_reg = Region.from_operation_list([visit(op.left)])
+  right_reg = Region.from_operation_list([visit(op.right)])
+  return id.Equals.get(left_reg, right_reg)
+
+
+@dispatch(ibis.expr.operations.logical.NotEquals)
+def visit(op):
+  print("neq")
+  left_reg = Region.from_operation_list([visit(op.left)])
+  right_reg = Region.from_operation_list([visit(op.right)])
+  return id.Equals.get(left_reg, right_reg)
 
 
 @dispatch(ibis.expr.operations.generic.TableColumn)

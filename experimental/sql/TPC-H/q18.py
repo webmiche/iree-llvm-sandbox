@@ -1,7 +1,7 @@
 import ibis
 
 
-def get_ibis_query(QUANTITY=300):
+def get_ibis_query(QUANTITY=ibis.literal(300, "int64")):
   from tpc_h_tables import customer, orders, lineitem
 
   subgq = lineitem.groupby([lineitem.l_orderkey])
