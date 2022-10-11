@@ -160,15 +160,6 @@ def visit(op):
   raise Exception("Cast")
 
 
-@dispatch(ibis.expr.operations.logical.Between)
-def visit(op):
-  print("between")
-  visit(op.arg)
-  left_reg = Region.from_operation_list([visit(op.lower_bound)])
-  right_reg = Region.from_operation_list([visit(op.upper_bound)])
-  return id.Equals.get(left_reg, right_reg)
-
-
 @dispatch(ibis.expr.operations.strings.Substring)
 def visit(op):
   print("substr")
@@ -293,6 +284,7 @@ def visit(  #type: ignore
 
 @dispatch(ibis.expr.operations.logical.Between)
 def visit(op):
+  print("between")
   arg = Region.from_operation_list([visit(op.arg)])
   lower_bound = Region.from_operation_list([visit(op.lower_bound)])
   upper_bound = Region.from_operation_list([visit(op.upper_bound)])
