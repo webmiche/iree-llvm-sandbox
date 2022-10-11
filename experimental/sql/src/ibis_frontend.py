@@ -81,6 +81,7 @@ def visit_ibis_expr_list(l: List[ibis.expr.types.Expr]) -> Region:
     # a version using an optimization on the ibis dialect or model And in
     # rel_alg and lower to that.
     if isinstance(op.op(), ibis.expr.operations.logical.And):
+      print("and")
       ops.append(visit(op.op().left))
       ops.append(visit(op.op().right))
     else:
