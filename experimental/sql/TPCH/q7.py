@@ -1,4 +1,5 @@
 from utils import add_date
+import ibis
 
 
 def get_ibis_query(NATION1="FRANCE", NATION2="GERMANY", DATE="1995-01-01"):
@@ -17,7 +18,7 @@ def get_ibis_query(NATION1="FRANCE", NATION2="GERMANY", DATE="1995-01-01"):
         n2.n_name.name("cust_nation"), lineitem.l_shipdate,
         lineitem.l_extendedprice, lineitem.l_discount,
         lineitem.l_shipdate.name("l_year"),  #.year().cast("string").name("l_year"),
-        (lineitem.l_extendedprice * (1 - lineitem.l_discount)).name("volume"),]
+        (lineitem.l_extendedprice * (ibis.literal(1, "int64") - lineitem.l_discount)).name("volume"),]
 
   q = q.filter([
       ((q.cust_nation == NATION1) & (q.supp_nation == NATION2)) |

@@ -75,66 +75,17 @@ def compile(query):
 def get_tpc_queries():
   queries = []
   queries.append(q1.get_ibis_query())
-  #queries.append(q2.get_ibis_query())
   queries.append(q3.get_ibis_query())
-  # queries.append(q4.get_ibis_query())
   queries.append(q5.get_ibis_query())
   queries.append(q6.get_ibis_query())
-  #queries.append(q7.get_ibis_query())
-  #queries.append(q8.get_ibis_query())
-  # queries.append(q9.get_ibis_query())
   queries.append(q10.get_ibis_query())
-  # queries.append(q11.get_ibis_query())
-  #queries.append(q12.get_ibis_query())
-  #queries.append(q13.get_ibis_query())
-  #queries.append(q14.get_ibis_query())
-  #queries.append(q15.get_ibis_query())
-  # queries.append(q16.get_ibis_query())
-  # queries.append(q17.get_ibis_query())
-  # queries.append(q18.get_ibis_query())
-  #queries.append(q19.get_ibis_query())
-  #queries.append(q20.get_ibis_query())
-  # queries.append(q21.get_ibis_query())
-  #queries.append(q22.get_ibis_query())
   return queries
 
 
 def run():
-  #_stdout = sys.stdout
-  #sys.stdout = s = StringIO()
   for i, q in enumerate(get_tpc_queries()):
     print(i + 1)
     compile(q)
-  #l = s.getvalue().splitlines()
-  #sys.stdout = _stdout
-  #return l
-
-
-def parse_data(f: str):
-  hardness = []
-  curr_hardness = []
-  for line in f:
-    l = line.strip()
-    if l.isnumeric():
-      hardness.append(list(dict.fromkeys(curr_hardness)))
-      curr_hardness = []
-    else:
-      curr_hardness.append(l)
-  hardness.append(list(dict.fromkeys(curr_hardness)))
-  return hardness[1:]
-
-
-def evaluate():
-  lists = parse_data(run())
-  handled = 0
-  for i, l in enumerate(lists):
-    if l == []:
-      handled += 1
-    else:
-      print(i + 1)
-      print(l)
-  print()
-  print(f"Handled: {handled}")
 
 
 if __name__ == "__main__":

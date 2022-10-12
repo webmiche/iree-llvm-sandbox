@@ -5,7 +5,10 @@ ibis.options.sql.default_limit = 100000
 
 def get_ibis_query(BRAND="Brand#45",
                    TYPE="MEDIUM POLISHED",
-                   SIZES=(49, 14, 23, 45, 19, 3, 36, 9)):
+                   SIZES=(ibis.literal(49, "int64"), ibis.literal(14, "int64"),
+                          ibis.literal(23, "int64"), ibis.literal(45, "int64"),
+                          ibis.literal(19, "int64"), ibis.literal(3, "int64"),
+                          ibis.literal(36, "int64"), ibis.literal(9, "int64"))):
   from tpc_h_tables import part, partsupp, supplier
 
   q = partsupp.join(part, part.p_partkey == partsupp.ps_partkey)

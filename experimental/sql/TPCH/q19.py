@@ -16,21 +16,24 @@ def get_ibis_query(
       ("SM CASE", "SM BOX", "SM PACK", "SM PKG"))) &
         (q.l_quantity >= QUANTITY1) &
         (q.l_quantity <= QUANTITY1 + ibis.literal(10, "int64")) &
-        (q.p_size.between(1, 5)) & (q.l_shipmode.isin(
+        (q.p_size.between(ibis.literal(1, "int64"), ibis.literal(5, "int64"))) &
+        (q.l_shipmode.isin(
             ("AIR", "AIR REG"))) & (q.l_shipinstruct == "DELIVER IN PERSON"))
 
   q2 = ((q.p_brand == BRAND2) & (q.p_container.isin(
       ("MED BAG", "MED BOX", "MED PKG", "MED PACK"))) &
         (q.l_quantity >= QUANTITY2) &
         (q.l_quantity <= QUANTITY2 + ibis.literal(10, "int64")) &
-        (q.p_size.between(1, 10)) & (q.l_shipmode.isin(
+        (q.p_size.between(ibis.literal(1, "int64"), ibis.literal(10, "int64")))
+        & (q.l_shipmode.isin(
             ("AIR", "AIR REG"))) & (q.l_shipinstruct == "DELIVER IN PERSON"))
 
   q3 = ((q.p_brand == BRAND3) & (q.p_container.isin(
       ("LG CASE", "LG BOX", "LG PACK", "LG PKG"))) &
         (q.l_quantity >= QUANTITY3) &
         (q.l_quantity <= QUANTITY3 + ibis.literal(10, "int64")) &
-        (q.p_size.between(1, 15)) & (q.l_shipmode.isin(
+        (q.p_size.between(ibis.literal(1, "int64"), ibis.literal(15, "int64")))
+        & (q.l_shipmode.isin(
             ("AIR", "AIR REG"))) & (q.l_shipinstruct == "DELIVER IN PERSON"))
 
   q = q.filter([q1 | q2 | q3])
