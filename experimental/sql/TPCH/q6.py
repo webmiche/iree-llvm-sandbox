@@ -1,10 +1,10 @@
-from utils import add_date
+from TPCH.utils import add_date
 import ibis
 from decimal import Decimal
 
 
 def get_ibis_query(DATE="1994-01-01", DISCOUNT=0.06, QUANTITY=24):
-  from tpc_h_tables import lineitem
+  from TPCH.tpc_h_tables import lineitem
   q = lineitem
   discount_min = round(DISCOUNT - 0.01, 2)
   discount_max = round(DISCOUNT + 0.01, 2)

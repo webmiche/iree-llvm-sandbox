@@ -22,6 +22,7 @@ from xdsl.ir import MLContext
 from xdsl.printer import Printer
 
 from decimal import Decimal
+import TPCH.q6 as q6
 
 import time
 
@@ -34,6 +35,7 @@ def compile(query):
   alg_to_ssa(ctx, mod)
   ssa_to_impl(ctx, mod)
   fuse_proj_into_scan(ctx, mod)
+  Printer().print_op(mod)
   data = impl_to_iterators(ctx, mod)
 
   converter = IteratorsMLIRConverter(ctx)
@@ -55,34 +57,6 @@ def run(query, df: pd.DataFrame):
     ie.run(mod, [arg])
     print("runtime: " + str(time.time() - start))
 
-
-t = ibis.table([("ORDERKEY", "int64"), ("PARTKE", "int64"),
-                ("SUPPKEY", "int64"), ("LINENUMBER", "int64"),
-                ("QUANTITY", "int64"), ("EXTENDEDPRICE", "decimal(32, 2)"),
-                ("DISCOUNT", "decimal(32, 2)"), ("TAX", "decimal(32, 2)"),
-                ("RETURNFLAG", "string"), ("LINESTATUS", "string"),
-                ("SHIPDATE", "timestamp"), ("COMMITDATE", "timestamp"),
-                ("RECEIPTDATE", "timestamp"), ("SHIPINSTRUCT", "string"),
-                ("SHIPMODE", "string"), ("COMMENT", "string")], 'lineitem')
-
-t2 = ibis.table([("im", "int64")], 'u')
-res = ibis.table([("revenue", "int64")], 'line')
-
-p1 = ibis.literal('1994-01-01', "timestamp")
-p1h = ibis.literal('1995-01-01', "timestamp")
-p2 = 0.06
-p3 = np.int64(24)
-
-filtered = t.filter(
-    (t['SHIPDATE'] >= p1) & (t['SHIPDATE'] < p1h) &
-    (t['DISCOUNT'] >= ibis.literal(Decimal("0.05"), "decimal(6, 2)")) &
-    (t['DISCOUNT'] <= ibis.literal(Decimal("0.07"), "decimal(6, 2)")) &
-    (t['QUANTITY'] < p3))
-
-multiply = filtered.projection(
-    (filtered['EXTENDEDPRICE'] * filtered['DISCOUNT']).name('im'))
-
-query = multiply.aggregate(multiply.im.sum().name('revenue'))
 
 lineitem = pd.read_table('/home/michel/MasterThesis/dbgen/lineitem_1.tbl',
                          delimiter="|",
@@ -114,4 +88,4 @@ lineitem = pd.read_table('/home/michel/MasterThesis/dbgen/lineitem_1.tbl',
                          infer_datetime_format=True,
                          index_col=False)
 
-run(query, lineitem)
+run(q6.get_ibis_query(), lineitem)
