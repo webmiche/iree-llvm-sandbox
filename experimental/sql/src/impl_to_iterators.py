@@ -374,7 +374,7 @@ def impl_to_iterators(ctx: MLContext, query: ModuleOp):
   body_block.add_ops(
       [query.body.blocks[0].detach_op(o) for o in query.body.blocks[0].ops])
   query.body.detach_block(0)
-  f = FuncOp.from_region("main", batches, [],
+  f = FuncOp.from_region("query", batches, [],
                          Region.from_block_list([body_block]))
   f.attributes['llvm.emit_c_interface'] = UnitAttr([])
   query.body.add_block(Block.from_ops([f]))
@@ -413,3 +413,5 @@ def impl_to_iterators(ctx: MLContext, query: ModuleOp):
                                 apply_recursively=False,
                                 walk_reverse=False)
   walker.rewrite_module(query)
+
+  return names

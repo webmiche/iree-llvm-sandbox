@@ -35,3 +35,22 @@ def to_columnar_batch_descriptor(df: pd.DataFrame):
     setattr(descriptor, 'column' + str(i),
             df[col].values.ctypes.data_as(ctypes.POINTER(dtype)))
   return descriptor
+
+
+def to_partial_columnar_batch_descriptor(df: pd.DataFrame, cols: list[str]):
+  '''
+  Converts the given DataFrame to an instance of ctype.Structure equivalent to
+  what an instance of a corresponding iterators.ColumnarBatchType would get
+  lowered to by IteratorsToLLVM.
+  '''
+
+  dtype_dict = dict(zip(df.columns, df.dtypes))
+
+  types = [dtype_dict[c] for c in cols]
+  dtypes = [np.ctypeslib.as_ctypes_type(t) for t in types]
+  descriptor = make_columnar_batch_descriptor(dtypes)
+  descriptor.num_elements = ctypes.c_longlong(len(df.index))
+  for i, (dtype, col) in enumerate(zip(dtypes, cols)):
+    setattr(descriptor, 'column' + str(i),
+            df[col].values.ctypes.data_as(ctypes.POINTER(dtype)))
+  return descriptor
