@@ -445,5 +445,10 @@ def visit(  #type: ignore
 
 
 def ibis_to_xdsl(ctx: MLContext, query: ibis.expr.types.Expr) -> ModuleOp:
+  global features
   features = []
   return ModuleOp.build(regions=[Region.from_operation_list([visit(query)])])
+
+
+def get_features():
+  return features

@@ -21,15 +21,15 @@ import q20
 import q21
 import q22
 
-from src.ibis_frontend import ibis_to_xdsl, features
+from src.ibis_frontend import ibis_to_xdsl, get_features
 
 from xdsl.ir import MLContext
 
 
 def compile(query):
   ctx = MLContext()
-  mod = ibis_to_xdsl(ctx, query)
-  for e in list(dict.fromkeys(features)):
+  ibis_to_xdsl(ctx, query)
+  for e in list(dict.fromkeys(get_features())):
     print(e)
 
 
