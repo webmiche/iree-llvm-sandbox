@@ -104,14 +104,14 @@ int benchmark(int64_t scale_factor) {
   // } while(multiplier < 2);
 
   double total_cycles = 0;
-  printf("%ld\n", scale_factor);
+  fprintf(stderr, "%ld\n", scale_factor);
   for (size_t j = 0; j < REP; j++) {
 
     for (size_t i = 0; i < num_runs; ++i) {
       start = start_tsc();
       query(row_count, shipdate, discount, quantity, extendedprice);
       end = stop_tsc(start);
-      printf("%lf\n", ((double)end) / 2.3e9);
+      fprintf(stderr, "%lf\n", ((double)end) / 2.3e9);
     }
 
     cycles = ((double)end) / num_runs;
