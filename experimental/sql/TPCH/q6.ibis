@@ -1,0 +1,3 @@
+import TPCH.q6 as q6
+
+q6.get_ibis_query()

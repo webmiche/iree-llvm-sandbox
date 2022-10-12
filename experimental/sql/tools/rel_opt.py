@@ -5,6 +5,10 @@
 
 try:
   from tools.IteratorsMLIRConverter import IteratorsMLIRConverter
+  from mlir_iterators.passmanager import PassManager
+  from mlir_iterators.ir import Context, Module
+  from mlir_iterators.dialects import iterators as it
+  import mlir_iterators.all_passes_registration
   mlir_loaded = True
 except ImportError:
   mlir_loaded = False
@@ -88,8 +92,22 @@ class RelOptMain(xDSLOptMain):
       mlir_module = converter.convert_module(prog)
       print(mlir_module, file=output)
 
+    def _output_llvm(prog: ModuleOp, output: IOBase):
+      with Context():
+        it.register_dialect()
+        converter = IteratorsMLIRConverter(self.ctx)
+        mlir_module = converter.convert_module(prog)
+        pm = PassManager.parse(
+            'convert-iterators-to-llvm,convert-memref-to-llvm,convert-func-to-llvm,'
+            'reconcile-unrealized-casts,convert-scf-to-cf,convert-cf-to-llvm,convert-arith-to-llvm'
+        )
+        mod2 = Module.parse(str(mlir_module))
+        pm.run(mod2)
+        print(mod2, file=output)
+
     if mlir_loaded:
       self.available_targets['mlir'] = _output_mlir
+      self.available_targets['llvm'] = _output_llvm
 
 
 def __main__():

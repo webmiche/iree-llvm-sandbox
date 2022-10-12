@@ -62,8 +62,8 @@ lineitem = pd.read_table('/home/michel/MasterThesis/dbgen/lineitem_1.tbl',
                          delimiter="|",
                          names=[
                              "ORDERKEY", "PARTKEY", "SUPPKEY", "LINENUMBER",
-                             "QUANTITY", "EXTENDEDPRICE", "DISCOUNT", "TAX",
-                             "RETURNFLAG", "LINESTATUS", "SHIPDATE",
+                             "l_quantity", "l_extendedprice", "l_discount",
+                             "TAX", "RETURNFLAG", "LINESTATUS", "l_shipdate",
                              "COMMITDATE", "RECEIPTDATE", "SHIPINSTRUCT",
                              "SHIPMODE", "COMMENT"
                          ],
