@@ -55,6 +55,20 @@ class Int64(DataType):
 
 
 @irdl_attr_definition
+class Float64(DataType):
+  """
+  Models a float64 type in a relational SSA query.
+
+  Example:
+
+  ```
+  !rel_ssa.float64
+  ```
+  """
+  name = "rel_ssa.float64"
+
+
+@irdl_attr_definition
 class Decimal(DataType):
   """
   Models a decimal type in a relational SSA query with precision `prec` and scale `scale`.
@@ -118,6 +132,23 @@ class Nullable(DataType):
 #===------------------------------------------------------------------------===#
 # Query types
 #===------------------------------------------------------------------------===#
+
+
+@irdl_attr_definition
+class Order(ParametrizedAttribute):
+  """
+  Models the order of a sort key.
+
+  Example:
+
+  '''
+  !rel_ssa.order<"a", "asc">
+  '''
+  """
+  name = "rel_ssa.order"
+
+  col: ParameterDef[StringAttr]
+  order: ParameterDef[StringAttr]
 
 
 @irdl_attr_definition
@@ -408,6 +439,64 @@ class Operator(Operation):
 
 
 @irdl_op_definition
+class Limit(Operator):
+  """
+  Limits the number of tuples in `input` to `n` .
+
+  Example:
+
+  ```
+  %0 : ... = rel_ssa.limit(...) ["n" = 10 : !i64]
+  ```
+  """
+  name = "rel_ssa.limit"
+
+  input = OperandDef(Bag)
+  n = AttributeDef(IntegerAttr)
+
+  result = ResultDef(Bag)
+
+  @staticmethod
+  @builder
+  def get(table: Operation, n: int) -> 'Limit':
+    return Limit.create(operands=[table.result],
+                        attributes={"n": IntegerAttr.from_int_and_width(n, 64)},
+                        result_types=[table.result.typ])
+
+
+@irdl_op_definition
+class OrderBy(Operator):
+  """
+  Orders the given input by the columns in `by`.
+
+  Example:
+  '''
+  %{{.*}} : !rel_ssa.bag<[!rel_ssa.schema_element<"a", !rel_ssa.string>]> = rel_ssa.order_by(%{{.*}} : !rel_ssa.bag<[!rel_ssa.schema_element<"a", !rel_ssa.string>]>) ["by" = [!rel_ssa.order<"a", "desc">]]
+  '''
+  """
+  name = "rel_ssa.order_by"
+
+  input = OperandDef(Bag)
+  by = AttributeDef(ArrayAttr)
+
+  result = ResultDef(Bag)
+
+  @builder
+  @staticmethod
+  def get(input: Operation, by: list[str], order: list[str]) -> 'OrderBy':
+    return OrderBy.build(
+        operands=[input],
+        attributes={
+            "by":
+                ArrayAttr.from_list([
+                    Order([StringAttr.from_str(s),
+                           StringAttr.from_str(o)]) for s, o in zip(by, order)
+                ])
+        },
+        result_types=[input.result.typ])
+
+
+@irdl_op_definition
 class Table(Operator):
   """
   Defines a table with name `table_name`.
@@ -532,21 +621,24 @@ class CartesianProduct(Operator):
 @irdl_op_definition
 class Aggregate(Operator):
   """
-  Applies the ith function of `functions` to the ith column name of `col_names`
-  of `input`. The ith resulting column has the same name as the ith input column
-  to the uniqueness of names.
+  Groups the table `input` by the columns in `by` by aggregating the ith element
+  of `col_names` by the ith element of `functions`. If `by` is empty, this
+  corresponds to the ungrouped aggregation. In the case of a `count(*)`, the
+  respective element in `col_names` is `""` instead of a column name.
 
 
   Example:
 
   '''
-  %0 : !rel_ssa.bag<[!rel_ssa.schema_element<"id", !rel_ssa.int32>]> = rel_ssa.aggregate(%0 : !rel_ssa.bag<[!rel_ssa.schema_element<"id", !rel_ssa.int32>]>) ["col_names" = ["id"], "functions" = ["sum"]] '''
+  %0 : !rel_ssa.bag<...> = rel_ssa.aggregate(%0 : !rel_ssa.bag<...>) ["col_names" = ["id"], "functions" = ["sum"], "by" = ["a", "b"]]
+  '''
   """
   name = "rel_ssa.aggregate"
 
   input = OperandDef(Bag)
   col_names = AttributeDef(ArrayOfConstraint(StringAttr))
   functions = AttributeDef(ArrayOfConstraint(StringAttr))
+  by = AttributeDef(ArrayOfConstraint(StringAttr))
   result = ResultDef(Bag)
 
   def verify_(self) -> None:
@@ -555,13 +647,13 @@ class Aggregate(Operator):
           f"Number of functions and column names should match: {len(self.functions.data)} vs {len(self.col_names.data)}"
       )
     for f in self.functions.data:
-      if not f.data in ["sum"]:
+      if not f.data in ["sum", "min", "max", "avg", "count", "count_distinct"]:
         raise Exception(f"function {f.data} is not a supported function")
 
   @builder
   @staticmethod
   def get(input: Operation, col_names: List[str], functions: List[str],
-          res_names: List[str]) -> 'Aggregate':
+          res_names: List[str], by: List[str]) -> 'Aggregate':
     return Aggregate.create(
         operands=[input.result],
         attributes={
@@ -569,12 +661,17 @@ class Aggregate(Operator):
                 ArrayAttr.from_list([StringAttr.from_str(c) for c in col_names]
                                    ),
             "functions":
-                ArrayAttr.from_list([StringAttr.from_str(f) for f in functions])
+                ArrayAttr.from_list([StringAttr.from_str(f) for f in functions]
+                                   ),
+            "by":
+                ArrayAttr.from_list([StringAttr.from_str(s) for s in by])
         },
         result_types=[
-            Bag.get(
-                res_names,
-                [input.result.typ.lookup_type_in_schema(n) for n in col_names])
+            Bag.get(res_names, [
+                Int64() if f in ["count", "count_distinct"] else
+                input.result.typ.lookup_type_in_schema(n)
+                for n, f in zip(col_names, functions)
+            ])
         ])
 
 
@@ -593,12 +690,16 @@ class RelSSA:
     self.ctx.register_attr(String)
     self.ctx.register_attr(Boolean)
     self.ctx.register_attr(SchemaElement)
+    self.ctx.register_attr(Order)
+    self.ctx.register_attr(Float64)
 
     self.ctx.register_op(Select)
     self.ctx.register_op(Table)
     self.ctx.register_op(Aggregate)
     self.ctx.register_op(Project)
     self.ctx.register_op(CartesianProduct)
+    self.ctx.register_op(OrderBy)
+    self.ctx.register_op(Limit)
 
     self.ctx.register_op(Literal)
     self.ctx.register_op(Compare)

@@ -33,6 +33,8 @@ class RelAlgRewriter(RewritePattern):
       return RelSSA.Int32()
     if isinstance(type_, RelAlg.Int64):
       return RelSSA.Int64()
+    if isinstance(type_, RelAlg.Float64):
+      return RelSSA.Float64()
     if isinstance(type_, RelAlg.Decimal):
       return RelSSA.Decimal([
           IntegerAttr.from_int_and_width(type_.prec.value.data,
@@ -115,11 +117,6 @@ class CompareRewriter(RelAlgRewriter):
 @dataclass
 class BinOpRewriter(RelAlgRewriter):
 
-  def convert_bin_op_to_str(self, op: RelAlg.BinOp) -> str:
-    if isinstance(op, RelAlg.Multiply):
-      return "*"
-    raise Exception(f"bin op conversion not yet implemented for {type(op)}")
-
   @op_type_rewrite_pattern
   def match_and_rewrite(self, op: RelAlg.BinOp, rewriter: PatternRewriter):
     # Remove the yield and inline the rest of the block.
@@ -132,7 +129,7 @@ class BinOpRewriter(RelAlgRewriter):
     right = rewriter.added_operations_before[-1]
 
     # TODO: Make Decimals change their prec and scale on certain operations.
-    new_op = RelSSA.BinOp.get(left, right, self.convert_bin_op_to_str(op))
+    new_op = RelSSA.BinOp.get(left, right, op.operator.data)
     rewriter.replace_matched_op([new_op, RelSSA.YieldTuple.get([new_op])])
 
 
@@ -158,6 +155,20 @@ class CartesianProductRewriter(RelAlgRewriter):
 
 
 @dataclass
+class OrderByRewriter(RelAlgRewriter):
+
+  @op_type_rewrite_pattern
+  def match_and_rewrite(self, op: RelAlg.OrderBy, rewriter: PatternRewriter):
+    rewriter.inline_block_before_matched_op(op.input.blocks[0])
+    input = rewriter.added_operations_before[-1]
+
+    rewriter.insert_op_before_matched_op(
+        RelSSA.OrderBy.get(input, [o.col.data for o in op.by.data],
+                           [o.order.data for o in op.by.data]))
+    rewriter.erase_matched_op()
+
+
+@dataclass
 class ProjectRewriter(RelAlgRewriter):
 
   # TODO: This could be implemented in a more natural way using Analysis Passes in MLIR.
@@ -175,7 +186,7 @@ class ProjectRewriter(RelAlgRewriter):
   @op_type_rewrite_pattern
   def match_and_rewrite(self, op: RelAlg.Project, rewriter: PatternRewriter):
     rewriter.inline_block_before_matched_op(op.input)
-    input_bag = rewriter.added_operations_before[0].result.typ
+    input_bag = rewriter.added_operations_before[-1].result.typ
     rewriter.insert_op_before_matched_op(
         RelSSA.Project.get(
             rewriter.added_operations_before[-1],
@@ -256,7 +267,20 @@ class AggregateRewriter(RelAlgRewriter):
         RelSSA.Aggregate.get(rewriter.added_operations_before[-1],
                              [c.data for c in op.col_names.data],
                              [f.data for f in op.functions.data],
-                             [r.data for r in op.res_names.data])
+                             [r.data for r in op.res_names.data],
+                             [b.data for b in op.by.data])
+    ])
+    rewriter.erase_matched_op()
+
+
+@dataclass
+class LimitRewriter(RelAlgRewriter):
+
+  @op_type_rewrite_pattern
+  def match_and_rewrite(self, op: RelAlg.Limit, rewriter: PatternRewriter):
+    rewriter.inline_block_before_matched_op(op.input.blocks[0])
+    rewriter.insert_op_before_matched_op([
+        RelSSA.Limit.get(rewriter.added_operations_before[-1], op.n.value.data)
     ])
     rewriter.erase_matched_op()
 
@@ -276,6 +300,8 @@ def alg_to_ssa(ctx: MLContext, query: ModuleOp):
       SelectRewriter(),
       AggregateRewriter(),
       ProjectRewriter(),
+      OrderByRewriter(),
+      LimitRewriter(),
       CartesianProductRewriter()
   ]),
                                          walk_regions_first=True,

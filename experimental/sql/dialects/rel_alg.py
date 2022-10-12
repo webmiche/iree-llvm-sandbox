@@ -83,6 +83,20 @@ class Int64(DataType):
 
 
 @irdl_attr_definition
+class Float64(DataType):
+  """
+  Models a float64 type in a relational query.
+
+  Example:
+
+  ```
+  !rel_alg.float64
+  ```
+  """
+  name = "rel_alg.float64"
+
+
+@irdl_attr_definition
 class String(DataType):
   """
   Models a string type in a relational query, that can be either nullable or
@@ -112,40 +126,54 @@ class Nullable(DataType):
   type: ParameterDef[DataType]
 
 
-class Expression(Operation):
-  ...
-
-
-class BinOp(Expression):
+@irdl_attr_definition
+class Order(ParametrizedAttribute):
   """
-  Binary operation on two values.
-  """
-
-  lhs = SingleBlockRegionDef()
-  rhs = SingleBlockRegionDef()
-
-
-@irdl_op_definition
-class Multiply(BinOp):
-  """
-  Multiplies two values.
+  Models the order of a sort key.
 
   Example:
 
   '''
-  rel_alg.multiply() {
+  !rel_alg.order<"a", "asc">
+  '''
+  """
+  name = "rel_alg.order"
+
+  col: ParameterDef[StringAttr]
+  order: ParameterDef[StringAttr]
+
+
+class Expression(Operation):
+  ...
+
+
+@irdl_op_definition
+class BinOp(Expression):
+  """
+  Computes the binary operation `operator` of `lhs` and `rhs`.
+
+  Example:
+
+  '''
+  rel_alg.bin_op() ["operator" = "*"] {
     rel_alg.column() ...
   } {
     rel_alg.column() ...
   }
   '''
   """
-  name = "rel_alg.multiply"
+
+  name = "rel_alg.bin_op"
+
+  lhs = SingleBlockRegionDef()
+  rhs = SingleBlockRegionDef()
+  operator = AttributeDef(StringAttr)
 
   @builder
   @staticmethod
-  def get(lhs: Region, rhs: Region) -> 'Multiply':
-    return Multiply.create(regions=[lhs, rhs])
+  def get(lhs: Region, rhs: Region, operator: str) -> 'BinOp':
+    return BinOp.create(regions=[lhs, rhs],
+                        attributes={"operator": StringAttr.from_str(operator)})
 
 
 @irdl_op_definition
@@ -225,16 +253,74 @@ class Operator(Operation):
 
 
 @irdl_op_definition
+class Limit(Operator):
+  """
+  Limits the number of tuples in `input` to `n` .
+
+  Example:
+
+  ```
+  rel_alg.limit() ["n" = 10 : !i64] {
+    ...
+  }
+  ```
+  """
+  name = "rel_alg.limit"
+
+  input = SingleBlockRegionDef()
+  n = AttributeDef(IntegerAttr)
+
+  @staticmethod
+  @builder
+  def get(table: Region, n: int) -> 'Limit':
+    return Limit.create(regions=[table],
+                        attributes={"n": IntegerAttr.from_int_and_width(n, 64)})
+
+
+@irdl_op_definition
+class OrderBy(Operator):
+  """
+  Orders the given input by the columns in `by`.
+
+  Example:
+  '''
+  rel_alg.order_by() ["by" = [!rel_alg.order<"a", "asc>, !rel_alg.order<"b", "desc">]] {
+    rel_alg.table() ...
+  }
+  '''
+  """
+  name = "rel_alg.order_by"
+
+  input = SingleBlockRegionDef()
+  by = AttributeDef(ArrayAttr)
+
+  @builder
+  @staticmethod
+  def get(input: Region, by: list[str], order: list[str]) -> 'OrderBy':
+    return OrderBy.build(
+        regions=[input],
+        attributes={
+            "by":
+                ArrayAttr.from_list([
+                    Order([StringAttr.from_str(s),
+                           StringAttr.from_str(o)]) for s, o in zip(by, order)
+                ])
+        })
+
+
+@irdl_op_definition
 class Aggregate(Operator):
   """
-  Applies the ith element of `functions` to the ith element of `col_names` of
-  the table `input`.
+  Groups the table `input` by the columns in `by` by aggregating the ith element
+  of `col_names` by the ith element of `functions`. If `by` is empty, this
+  corresponds to the ungrouped aggregation. In the case of a `count(*)`, the
+  respective element in `col_names` is `""` instead of a column name.
 
   Example:
 
   '''
-  rel_alg.aggregate() ["col_names = ["b"], "functions" = ["sum"]] {
-    rel_alg.pandas_table() ...
+  rel_alg.aggregate() ["col_names = ["b", "d"], "functions" = ["sum", "any"], "res_names" = ["a", "b"], "by" = ["c"]] {
+    rel_alg.table() ...
   }
   '''
   """
@@ -244,18 +330,17 @@ class Aggregate(Operator):
   col_names = AttributeDef(ArrayOfConstraint(StringAttr))
   functions = AttributeDef(ArrayOfConstraint(StringAttr))
   res_names = AttributeDef(ArrayOfConstraint(StringAttr))
-
-  # TODO: add support for grouping...
+  by = AttributeDef(ArrayOfConstraint(StringAttr))
 
   def verify_(self) -> None:
     for f in self.functions.data:
-      if not f.data in ["sum"]:
+      if not f.data in ["sum", "min", "max", "avg", "count", "count_distinct"]:
         raise Exception(f"function {f.data} is not a supported function")
 
   @staticmethod
   @builder
   def get(input: Region, col_names: List[str], functions: List[str],
-          res_names: List[str]) -> 'Aggregate':
+          res_names: List[str], by: List[str]) -> 'Aggregate':
     return Aggregate.create(
         regions=[input],
         attributes={
@@ -266,7 +351,10 @@ class Aggregate(Operator):
                 ArrayAttr.from_list([StringAttr.from_str(f) for f in functions]
                                    ),
             "res_names":
-                ArrayAttr.from_list([StringAttr.from_str(n) for n in res_names])
+                ArrayAttr.from_list([StringAttr.from_str(n) for n in res_names]
+                                   ),
+            "by":
+                ArrayAttr.from_list([StringAttr.from_str(c) for c in by])
         })
 
 
@@ -414,14 +502,18 @@ class RelationalAlg:
     self.ctx.register_attr(Decimal)
     self.ctx.register_attr(Int64)
     self.ctx.register_attr(Nullable)
+    self.ctx.register_attr(Order)
+    self.ctx.register_attr(Float64)
 
     self.ctx.register_op(Table)
+    self.ctx.register_op(Limit)
     self.ctx.register_op(SchemaElement)
     self.ctx.register_op(Select)
     self.ctx.register_op(Project)
     self.ctx.register_op(CartesianProduct)
-    self.ctx.register_op(Multiply)
+    self.ctx.register_op(BinOp)
     self.ctx.register_op(Literal)
     self.ctx.register_op(Column)
     self.ctx.register_op(Compare)
     self.ctx.register_op(Aggregate)
+    self.ctx.register_op(OrderBy)

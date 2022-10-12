@@ -102,6 +102,22 @@ class Int64(DataType):
 
 
 @irdl_attr_definition
+class Float64(DataType):
+  """
+  Models the ibis float64 type.
+
+  https://github.com/ibis-project/ibis/blob/f3d267b96b9f14d3616c17b8f7bdeb8d0a6fc2cf/ibis/expr/datatypes.py#L334
+
+  Example:
+
+  ```
+  !ibis.float64
+  ```
+  """
+  name = "ibis.float64"
+
+
+@irdl_attr_definition
 class String(DataType):
   """
   Models the ibis string type. The Parameter `nullable` defines whether the
@@ -145,6 +161,102 @@ class TableColumn(Operation):
 
 
 @irdl_op_definition
+class Subtract(Operation):
+  """
+  Models a subtraction of the columns `lhs` and `rhs` with result type `output_type`.
+
+  https://github.com/ibis-project/ibis/blob/f3d267b96b9f14d3616c17b8f7bdeb8d0a6fc2cf/ibis/expr/operations/numeric.py#L39
+
+  Example:
+  ```
+  ibis.subtraction() ["output_type" = !ibis.int64] {
+    // lhs
+    ibis.table_column() ...
+  } {
+    // rhs
+    ibis.table_column() ...
+  }
+  ```
+
+  """
+  name = "ibis.subtract"
+
+  lhs = SingleBlockRegionDef()
+  rhs = SingleBlockRegionDef()
+  output_type = AttributeDef(DataType)
+
+  @staticmethod
+  @builder
+  def get(lhs: Region, rhs: Region, output_type: DataType) -> 'Subtract':
+    return Subtract.create(regions=[lhs, rhs],
+                           attributes={"output_type": output_type})
+
+
+@irdl_op_definition
+class Add(Operation):
+  """
+  Models an addition of the columns `lhs` and `rhs` with result type `output_type`.
+
+  https://github.com/ibis-project/ibis/blob/f3d267b96b9f14d3616c17b8f7bdeb8d0a6fc2cf/ibis/expr/operations/numeric.py#L20
+
+  Example:
+  ```
+  ibis.add() ["output_type" = !ibis.int64] {
+    // lhs
+    ibis.table_column() ...
+  } {
+    // rhs
+    ibis.table_column() ...
+  }
+  ```
+
+  """
+  name = "ibis.add"
+
+  lhs = SingleBlockRegionDef()
+  rhs = SingleBlockRegionDef()
+  output_type = AttributeDef(DataType)
+
+  @staticmethod
+  @builder
+  def get(lhs: Region, rhs: Region, output_type: DataType) -> 'Add':
+    return Add.create(regions=[lhs, rhs],
+                      attributes={"output_type": output_type})
+
+
+@irdl_op_definition
+class Divide(Operation):
+  """
+  Models a division of the columns `lhs` and `rhs` with result type `output_type`.
+
+  https://github.com/ibis-project/ibis/blob/f3d267b96b9f14d3616c17b8f7bdeb8d0a6fc2cf/ibis/expr/operations/numeric.py#L44
+
+  Example:
+  ```
+  ibis.divide() ["output_type" = !ibis.int64] {
+    // lhs
+    ibis.table_column() ...
+  } {
+    // rhs
+    ibis.table_column() ...
+  }
+  ```
+
+  """
+  name = "ibis.divide"
+
+  lhs = SingleBlockRegionDef()
+  rhs = SingleBlockRegionDef()
+  output_type = AttributeDef(DataType)
+
+  @staticmethod
+  @builder
+  def get(lhs: Region, rhs: Region, output_type: DataType) -> 'Divide':
+    return Divide.create(regions=[lhs, rhs],
+                         attributes={"output_type": output_type})
+
+
+@irdl_op_definition
 class Multiply(Operation):
   """
   Models an multiplication of the columnds `lhs` and `rhs` with result type `output_type`.
@@ -178,6 +290,38 @@ class Multiply(Operation):
   def get(lhs: Region, rhs: Region, output_type: DataType) -> 'Multiply':
     return Multiply.create(regions=[lhs, rhs],
                            attributes={"output_type": output_type})
+
+
+@irdl_op_definition
+class SortKey(Operation):
+  """
+  Models a sort key in ibis. The main information in this node is the order
+  ("asc" for ascending and "desc" for desceding).
+
+  https://github.com/ibis-project/ibis/blob/f3d267b96b9f14d3616c17b8f7bdeb8d0a6fc2cf/ibis/expr/operations/sortkeys.py#L60
+
+  Example:
+
+  '''
+  ibis.sort_key() ["order" = "asc"] {
+    ibis.table_column() ["col_name" = "a"] ...
+  }
+  '''
+  """
+  name = "ibis.sort_key"
+
+  expr = SingleBlockRegionDef()
+  order = AttributeDef(AnyAttr())
+
+  @staticmethod
+  @builder
+  def get(expr: Region, asc: bool) -> 'SortKey':
+    return SortKey.create(regions=[expr],
+                          attributes={
+                              "order":
+                                  StringAttr.from_str("asc")
+                                  if asc else StringAttr.from_str("desc")
+                          })
 
 
 @irdl_op_definition
@@ -220,13 +364,14 @@ class Selection(Operation):
   table = SingleBlockRegionDef()
   predicates = SingleBlockRegionDef()
   projections = SingleBlockRegionDef()
+  sort_keys = SingleBlockRegionDef()
   names = AttributeDef(ArrayOfConstraint(StringAttr))
 
   @staticmethod
   @builder
   def get(table: Region, predicates: Region, projections: Region,
-          names: list[str]) -> 'Selection':
-    return Selection.create(regions=[table, predicates, projections],
+          sort_keys: Region, names: list[str]) -> 'Selection':
+    return Selection.create(regions=[table, predicates, projections, sort_keys],
                             attributes={
                                 "names":
                                     ArrayAttr.from_list(
@@ -237,38 +382,50 @@ class Selection(Operation):
 @irdl_op_definition
 class Aggregation(Operation):
   """
-  Models an ibis aggregation query where `metrics` defines the aggregation function.
+  Models an ibis aggregation over `table` where `metrics` defines the
+  aggregation function, `names` defines the result schema, and `by` defines the
+  columns to group by. If `by` is empty, this corresponds to a ungrouped
+  aggregation. If there is a `TableColumn` as hte top-level operation of
+  `metrics`, we use an implicit `ANY` aggregation, so the result will just
+  correspond to any value of that column. If `metrics` is empty, this
+  corresponds to choosing all columns. The ones not grouped by are aggregate
+  through `ANY`.
 
   https://github.com/ibis-project/ibis/blob/f3d267b96b9f14d3616c17b8f7bdeb8d0a6fc2cf/ibis/expr/operations/relations.py#L589
 
   Example:
 
   '''
-  ibis.aggregation() {
-    ibis.pandas_table() ...
+  ibis.aggregation() ["names" = ["a", "b"]] {
+    ibis.unbound_table() ...
   } {
     ibis.sum() {
       ...
     }
+  } {
+    ibis.table_column() ...
   }
   '''
+
+  TODO: add support for grouping without aggregation
   """
   name = "ibis.aggregation"
 
   table = SingleBlockRegionDef()
   metrics = SingleBlockRegionDef()
   names = AttributeDef(ArrayOfConstraint(StringAttr))
+  by = SingleBlockRegionDef()
   # TODO: figure out what the rest of these two and model them
-  # by = SingleBlockRegionDef()
   # having = SingleBlockRegionDef()
   # predicates = SingleBlockRegionDef()
   # sort_keys = SingleBlockRegionDef()
 
   @staticmethod
   @builder
-  def get(table: Region, metrics: Region, names: list[str]) -> 'Aggregation':
+  def get(table: Region, metrics: Region, by: Region,
+          names: list[str]) -> 'Aggregation':
     return Aggregation.create(
-        regions=[table, metrics],
+        regions=[table, metrics, by],
         attributes={
             "names":
                 ArrayAttr.from_list([StringAttr.from_str(n) for n in names])
@@ -306,7 +463,7 @@ class CartesianProduct(Operation):
 class Sum(Operation):
   """
   Sums up all the elements of the column given in arg based on the encompassing
-  aggregation operator.
+  aggregation operator. The operation in `arg` has to be a TableColumn.
 
   https://github.com/ibis-project/ibis/blob/f3d267b96b9f14d3616c17b8f7bdeb8d0a6fc2cf/ibis/expr/operations/reductions.py#L95
 
@@ -330,6 +487,140 @@ class Sum(Operation):
   @builder
   def get(arg: Region) -> 'Sum':
     return Sum.create(regions=[arg])
+
+
+@irdl_op_definition
+class Min(Operation):
+  """
+  Takes the minimum of all the elements of the column given in `arg` based on
+  the encompassing aggregation operator. The operation in `arg` has to be a
+  TableColumn.
+
+  https://github.com/ibis-project/ibis/blob/f3d267b96b9f14d3616c17b8f7bdeb8d0a6fc2cf/ibis/expr/operations/reductions.py#L204
+
+  Example:
+
+  '''
+  ibis.min() {
+    ibis.table_column() ...
+  }
+  '''
+  """
+  name = "ibis.min"
+
+  arg = SingleBlockRegionDef()
+
+  @staticmethod
+  @builder
+  def get(arg: Region) -> 'Min':
+    return Min.create(regions=[arg])
+
+
+@irdl_op_definition
+class Max(Operation):
+  """
+  Takes the maximum of all the elements of the column given in arg based on the
+  encompassing aggregation operator. The operation in `arg` has to be a
+  TableColumn.
+
+  https://github.com/ibis-project/ibis/blob/f3d267b96b9f14d3616c17b8f7bdeb8d0a6fc2cf/ibis/expr/operations/reductions.py#L197
+
+  Example:
+
+  '''
+  ibis.max() {
+    ibis.table_column() ...
+  }
+  '''
+  """
+  name = "ibis.max"
+
+  arg = SingleBlockRegionDef()
+
+  @staticmethod
+  @builder
+  def get(arg: Region) -> 'Max':
+    return Max.create(regions=[arg])
+
+
+@irdl_op_definition
+class Mean(Operation):
+  """
+  Takes the mean of all the elements of the column given in arg based on the
+  encompassing aggregation operator. The operation in `arg` has to be a
+  TableColumn.
+
+  https://github.com/ibis-project/ibis/blob/f3d267b96b9f14d3616c17b8f7bdeb8d0a6fc2cf/ibis/expr/operations/reductions.py#L108
+
+  Example:
+
+  '''
+  ibis.mean() {
+    ibis.table_column() ...
+  }
+  '''
+  """
+  name = "ibis.mean"
+
+  arg = SingleBlockRegionDef()
+
+  @staticmethod
+  @builder
+  def get(arg: Region) -> 'Mean':
+    return Mean.create(regions=[arg])
+
+
+@irdl_op_definition
+class Count(Operation):
+  """
+  Counts the elements in arg based on the encompassing aggregation operator. The
+  operation in `arg` has to be either a TableColumn for the count of non null
+  values in that column or a Table in the case of count(*).
+
+  https://github.com/ibis-project/ibis/blob/f3d267b96b9f14d3616c17b8f7bdeb8d0a6fc2cf/ibis/expr/operations/reductions.py#L18
+
+  Example:
+
+  '''
+  ibis.count() {
+    ibis.unbound_table() ...
+  }
+  '''
+  """
+  name = "ibis.count"
+
+  arg = SingleBlockRegionDef()
+
+  @staticmethod
+  @builder
+  def get(arg: Region) -> 'Count':
+    return Count.create(regions=[arg])
+
+
+@irdl_op_definition
+class CountDistinct(Operation):
+  """
+  Counts the distinct elements of the column in arg based on the encompassing
+  aggregation operator. The operation in `arg` has to be a TableColumn.
+
+  https://github.com/ibis-project/ibis/blob/f3d267b96b9f14d3616c17b8f7bdeb8d0a6fc2cf/ibis/expr/operations/reductions.py#L265
+
+  Example:
+
+  '''
+  ibis.count_distinct() {
+    ibis.table_column() ...
+  }
+  '''
+  """
+  name = "ibis.count_distinct"
+
+  arg = SingleBlockRegionDef()
+
+  @staticmethod
+  @builder
+  def get(arg: Region) -> 'CountDistinct':
+    return CountDistinct.create(regions=[arg])
 
 
 @irdl_op_definition
@@ -390,6 +681,36 @@ class GreaterEqual(Operation):
   @staticmethod
   def get(left: Region, right: Region) -> 'GreaterEqual':
     return GreaterEqual.create(regions=[left, right])
+
+
+@irdl_op_definition
+class GreaterThan(Operation):
+  """
+  Checks whether each entry of `left` is greater than `right`.
+
+  https://github.com/ibis-project/ibis/blob/f3d267b96b9f14d3616c17b8f7bdeb8d0a6fc2cf/ibis/expr/operations/logical.py#L94
+
+  Example:
+
+  ```
+  ibis.greaterThan() {
+    // left
+    ibis.table_column() ...
+  } {
+    // right
+    ibis.literal() ...
+  }
+  ```
+  """
+  name = "ibis.greaterThan"
+
+  left = SingleBlockRegionDef()
+  right = SingleBlockRegionDef()
+
+  @builder
+  @staticmethod
+  def get(left: Region, right: Region) -> 'GreaterThan':
+    return GreaterThan.create(regions=[left, right])
 
 
 @irdl_op_definition
@@ -481,6 +802,33 @@ class UnboundTable(Operation):
 
 
 @irdl_op_definition
+class Limit(Operation):
+  """
+  Limits the number of tuples in `table` to `n` .
+
+  https://github.com/ibis-project/ibis/blob/f3d267b96b9f14d3616c17b8f7bdeb8d0a6fc2cf/ibis/expr/operations/relations.py#L337
+
+  Example:
+
+  ```
+  ibis.limit() ["n" = 10 : !i64] {
+    ...
+  }
+  ```
+  """
+  name = "ibis.limit"
+
+  table = SingleBlockRegionDef()
+  n = AttributeDef(IntegerAttr)
+
+  @staticmethod
+  @builder
+  def get(table: Region, n: int) -> 'Limit':
+    return Limit.create(regions=[table],
+                        attributes={"n": IntegerAttr.from_int_and_width(n, 64)})
+
+
+@irdl_op_definition
 class SchemaElement(Operation):
   """
   Defines a schema element with name `elt_name` and type `elt_type`.
@@ -505,6 +853,36 @@ class SchemaElement(Operation):
         "elt_name": StringAttr.from_str(name),
         "elt_type": type
     })
+
+
+@irdl_op_definition
+class Between(Operation):
+  """
+  Returns whether `arg` is in between `lower_bound` and `upper_bound`. These bounds are inclusive.
+
+  https://github.com/ibis-project/ibis/blob/f3d267b96b9f14d3616c17b8f7bdeb8d0a6fc2cf/ibis/expr/operations/logical.py#L114
+
+  Example:
+  '''
+  ibis.between() {
+    ibis.table_colum()...
+  } {
+    ibis.literal() ...
+  } {
+    ibis.literal()
+  }
+  '''
+  """
+  name = "ibis.between"
+
+  arg = SingleBlockRegionDef()
+  lower_bound = SingleBlockRegionDef()
+  upper_bound = SingleBlockRegionDef()
+
+  @builder
+  @staticmethod
+  def get(arg: Region, lower_bound: Region, upper_bound: Region) -> 'Between':
+    return Between.create(regions=[arg, lower_bound, upper_bound])
 
 
 @irdl_op_definition
@@ -540,20 +918,33 @@ class Ibis:
     self.ctx.register_attr(String)
     self.ctx.register_attr(Int32)
     self.ctx.register_attr(Int64)
+    self.ctx.register_attr(Float64)
     self.ctx.register_attr(Decimal)
     self.ctx.register_attr(Timestamp)
     self.ctx.register_attr(Nullable)
 
+    self.ctx.register_op(Subtract)
+    self.ctx.register_op(Add)
+    self.ctx.register_op(Divide)
     self.ctx.register_op(UnboundTable)
+    self.ctx.register_op(SortKey)
+    self.ctx.register_op(Limit)
     self.ctx.register_op(SchemaElement)
     self.ctx.register_op(Selection)
     self.ctx.register_op(CartesianProduct)
     self.ctx.register_op(Multiply)
+    self.ctx.register_op(Between)
     self.ctx.register_op(Equals)
     self.ctx.register_op(GreaterEqual)
+    self.ctx.register_op(GreaterThan)
     self.ctx.register_op(LessEqual)
     self.ctx.register_op(LessThan)
     self.ctx.register_op(TableColumn)
     self.ctx.register_op(Literal)
     self.ctx.register_op(Sum)
+    self.ctx.register_op(Mean)
+    self.ctx.register_op(Min)
+    self.ctx.register_op(Max)
+    self.ctx.register_op(Count)
+    self.ctx.register_op(CountDistinct)
     self.ctx.register_op(Aggregation)

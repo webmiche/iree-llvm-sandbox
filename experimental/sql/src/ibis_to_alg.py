@@ -29,6 +29,8 @@ class IbisRewriter(RewritePattern):
       return RelAlg.Int32()
     if isinstance(type_, ibis.Int64):
       return RelAlg.Int64()
+    if isinstance(type_, ibis.Float64):
+      return RelAlg.Float64()
     if isinstance(type_, ibis.Timestamp):
       return RelAlg.Timestamp()
     if isinstance(type_, ibis.Decimal):
@@ -79,6 +81,17 @@ class LiteralRewriter(IbisRewriter):
 
 
 @dataclass
+class LimitRewriter(IbisRewriter):
+  # This is a simple 1-1 rewrite.
+
+  @op_type_rewrite_pattern
+  def match_and_rewrite(self, op: ibis.Limit, rewriter: PatternRewriter):
+    rewriter.replace_matched_op(
+        RelAlg.Limit.get(rewriter.move_region_contents_to_new_regions(op.table),
+                         op.n.value.data))
+
+
+@dataclass
 class EqualsRewriter(IbisRewriter):
 
   @op_type_rewrite_pattern
@@ -97,6 +110,17 @@ class GreaterEqualRewriter(IbisRewriter):
     rewriter.replace_matched_op(
         RelAlg.Compare.get(
             ">=", rewriter.move_region_contents_to_new_regions(op.left),
+            rewriter.move_region_contents_to_new_regions(op.right)))
+
+
+@dataclass
+class GreaterThanRewriter(IbisRewriter):
+
+  @op_type_rewrite_pattern
+  def match_and_rewrite(self, op: ibis.GreaterThan, rewriter: PatternRewriter):
+    rewriter.replace_matched_op(
+        RelAlg.Compare.get(
+            ">", rewriter.move_region_contents_to_new_regions(op.left),
             rewriter.move_region_contents_to_new_regions(op.right)))
 
 
@@ -142,12 +166,20 @@ class SelectionRewriter(IbisRewriter):
           RelAlg.Select.get(
               rewriter.move_region_contents_to_new_regions(op.table),
               rewriter.move_region_contents_to_new_regions(op.predicates)))
-    else:
+    elif len(op.projections.ops) > 0:
       rewriter.replace_matched_op(
           RelAlg.Project.get(
               rewriter.move_region_contents_to_new_regions(op.table),
               rewriter.move_region_contents_to_new_regions(op.projections),
               op.names))
+    else:
+      assert all(
+          [isinstance(o.expr.op, ibis.TableColumn) for o in op.sort_keys.ops])
+      rewriter.replace_matched_op(
+          RelAlg.OrderBy.get(
+              rewriter.move_region_contents_to_new_regions(op.table),
+              [o.expr.op.col_name.data for o in op.sort_keys.ops],
+              [o.order.data for o in op.sort_keys.ops]))
 
 
 @dataclass
@@ -168,6 +200,19 @@ class AggregationRewriter(IbisRewriter):
   def get_col_name_and_function(self, metric_op: Operation) -> Tuple[str, str]:
     if isinstance(metric_op, ibis.Sum):
       return "sum", metric_op.arg.op.attributes["col_name"].data
+    if isinstance(metric_op, ibis.Min):
+      return "min", metric_op.arg.op.attributes["col_name"].data
+    if isinstance(metric_op, ibis.Max):
+      return "max", metric_op.arg.op.attributes["col_name"].data
+    if isinstance(metric_op, ibis.Mean):
+      return "avg", metric_op.arg.op.attributes["col_name"].data
+    if isinstance(metric_op, ibis.CountDistinct):
+      return "count_distinct", metric_op.arg.op.attributes["col_name"].data
+    if isinstance(metric_op, ibis.Count):
+      if isinstance(metric_op.arg.op, ibis.TableColumn):
+        return "count", metric_op.arg.op.attributes["col_name"].data
+      else:
+        return "count", ""
     raise Exception(
         f"aggregation function not yet implemented {type(metric_op)}")
 
@@ -176,10 +221,14 @@ class AggregationRewriter(IbisRewriter):
     functions, col_names = map(
         list, zip(*[self.get_col_name_and_function(o) for o in op.metrics.ops]))
 
+    assert all([isinstance(o, ibis.TableColumn) for o in op.by.ops])
+
+    by = [o.col_name.data for o in op.by.ops]
+
     rewriter.replace_matched_op(
         RelAlg.Aggregate.get(
             rewriter.move_region_contents_to_new_regions(op.table), col_names,
-            functions, [r.data for r in op.names.data]))
+            functions, [r.data for r in op.names.data], by))
 
 
 @dataclass
@@ -188,9 +237,57 @@ class MultiplyRewriter(IbisRewriter):
   @op_type_rewrite_pattern
   def match_and_rewrite(self, op: ibis.Multiply, rewriter: PatternRewriter):
     rewriter.replace_matched_op(
-        RelAlg.Multiply.get(
-            rewriter.move_region_contents_to_new_regions(op.lhs),
-            rewriter.move_region_contents_to_new_regions(op.rhs)))
+        RelAlg.BinOp.get(rewriter.move_region_contents_to_new_regions(op.lhs),
+                         rewriter.move_region_contents_to_new_regions(op.rhs),
+                         "*"))
+
+
+@dataclass
+class DivideRewriter(IbisRewriter):
+
+  @op_type_rewrite_pattern
+  def match_and_rewrite(self, op: ibis.Divide, rewriter: PatternRewriter):
+    rewriter.replace_matched_op(
+        RelAlg.BinOp.get(rewriter.move_region_contents_to_new_regions(op.lhs),
+                         rewriter.move_region_contents_to_new_regions(op.rhs),
+                         "/"))
+
+
+@dataclass
+class SubtractRewriter(IbisRewriter):
+
+  @op_type_rewrite_pattern
+  def match_and_rewrite(self, op: ibis.Subtract, rewriter: PatternRewriter):
+    rewriter.replace_matched_op(
+        RelAlg.BinOp.get(rewriter.move_region_contents_to_new_regions(op.lhs),
+                         rewriter.move_region_contents_to_new_regions(op.rhs),
+                         "-"))
+
+
+@dataclass
+class AddRewriter(IbisRewriter):
+
+  @op_type_rewrite_pattern
+  def match_and_rewrite(self, op: ibis.Add, rewriter: PatternRewriter):
+    rewriter.replace_matched_op(
+        RelAlg.BinOp.get(rewriter.move_region_contents_to_new_regions(op.lhs),
+                         rewriter.move_region_contents_to_new_regions(op.rhs),
+                         "+"))
+
+
+@dataclass
+class BetweenRewriter(IbisRewriter):
+
+  @op_type_rewrite_pattern
+  def match_and_rewrite(self, op: ibis.Between, rewriter: PatternRewriter):
+    rewriter.insert_op_before_matched_op(
+        RelAlg.Compare.get(
+            "<=", rewriter.move_region_contents_to_new_regions(op.lower_bound),
+            Region.from_operation_list([o.clone() for o in op.arg.ops])))
+    rewriter.replace_matched_op(
+        RelAlg.Compare.get(
+            "<=", rewriter.move_region_contents_to_new_regions(op.arg),
+            rewriter.move_region_contents_to_new_regions(op.upper_bound)))
 
 
 def ibis_to_alg(ctx: MLContext, query: ModuleOp):
@@ -201,11 +298,17 @@ def ibis_to_alg(ctx: MLContext, query: ModuleOp):
       CartesianProductRewriter(),
       EqualsRewriter(),
       GreaterEqualRewriter(),
+      GreaterThanRewriter(),
       LessEqualRewriter(),
       LessThanRewriter(),
       TableColumnRewriter(),
       AggregationRewriter(),
       MultiplyRewriter(),
+      SubtractRewriter(),
+      DivideRewriter(),
+      AddRewriter(),
+      LimitRewriter(),
+      BetweenRewriter(),
       LiteralRewriter()
   ]),
                                 walk_regions_first=False,

@@ -57,6 +57,20 @@ class Int64(DataType):
 
 
 @irdl_attr_definition
+class Float64(DataType):
+  """
+  Models a float64 type in a relational implementation query.
+
+  Example:
+
+  ```
+  !rel_impl.float64
+  ```
+  """
+  name = "rel_impl.float64"
+
+
+@irdl_attr_definition
 class Decimal(DataType):
   """
   Models a decimal type in a relational implementation query with precision `prec` and scale `scale`.
@@ -120,6 +134,23 @@ class Nullable(DataType):
 #===------------------------------------------------------------------------===#
 # Query types
 #===------------------------------------------------------------------------===#
+
+
+@irdl_attr_definition
+class Order(ParametrizedAttribute):
+  """
+  Models the order of a sort key.
+
+  Example:
+
+  '''
+  !rel_impl.order<"a", "asc">
+  '''
+  """
+  name = "rel_impl.order"
+
+  col: ParameterDef[StringAttr]
+  order: ParameterDef[StringAttr]
 
 
 @irdl_attr_definition
@@ -554,7 +585,7 @@ class Project(Operator):
   def get(input: Operation, res_names: List[str], res_types: List[DataType],
           projection: Region) -> 'Project':
     return Project.create(operands=[input.result],
-                          result_types=[Bag.get(res_names, res_types)],
+                          result_types=[Bag.get(res_types, res_names)],
                           regions=[projection])
 
   @staticmethod
@@ -567,16 +598,50 @@ class Project(Operator):
 
 
 @irdl_op_definition
+class MergeSort(Operator):
+  """
+  Uses merge sort to sort the given input by the columns in `by`.
+
+  Example:
+  '''
+  %{{.*}} : !rel_impl.bag<...> = rel_impl.merge_sort(%{{.*}} : !rel_impl.bag<...>) ["by" = [!rel_impl.order<"a", "desc">]]
+  '''
+  """
+  name = "rel_impl.merge_sort"
+
+  input = OperandDef(Bag)
+  by = AttributeDef(ArrayAttr)
+
+  result = ResultDef(Bag)
+
+  @builder
+  @staticmethod
+  def get(input: Operation, by: list[str], order: list[str]) -> 'MergeSort':
+    return MergeSort.build(
+        operands=[input],
+        attributes={
+            "by":
+                ArrayAttr.from_list([
+                    Order([StringAttr.from_str(s),
+                           StringAttr.from_str(o)]) for s, o in zip(by, order)
+                ])
+        },
+        result_types=[input.result.typ])
+
+
+@irdl_op_definition
 class Aggregate(Operator):
   """
-  Applies the ith function of `functions` to the ith column name of `col_names`
-  of `input`.
+  Groups the table `input` by the columns in `by` by aggregating the ith element
+  of `col_names` by the ith element of `functions`. If `by` is empty, this
+  corresponds to the ungrouped aggregation. In the case of a `count(*)`, the
+  respective element in `col_names` is `""` instead of a column name.
 
 
   Example:
 
   '''
-  %0 : !rel_impl.bag<[!rel_impl.schema_element<"id", !rel_impl.int32>]> = rel_impl.aggregate(%0 : !rel_impl.bag<[!rel_impl.schema_element<"id", !rel_impl.int32>]>) ["col_names" = ["id"], "functions" = ["sum"]]
+  %0 : !rel_impl.bag<...> = rel_impl.aggregate(%0 : !rel_impl.bag<...>) ["col_names" = ["id"], "functions" = ["sum"], "by" = ["a"]]
   '''
   """
   name = "rel_impl.aggregate"
@@ -584,6 +649,7 @@ class Aggregate(Operator):
   input = OperandDef(Bag)
   col_names = AttributeDef(ArrayOfConstraint(StringAttr))
   functions = AttributeDef(ArrayOfConstraint(StringAttr))
+  by = AttributeDef(ArrayOfConstraint(StringAttr))
   result = ResultDef(Bag)
 
   def verify_(self) -> None:
@@ -592,13 +658,13 @@ class Aggregate(Operator):
           f"Number of functions and column names should match: {len(self.functions.data)} vs {len(self.col_names.data)}"
       )
     for f in self.functions.data:
-      if not f.data in ["sum"]:
+      if not f.data in ["sum", "min", "max", "avg", "count", "count_distinct"]:
         raise Exception(f"function {f.data} is not a supported function")
 
   @builder
   @staticmethod
   def get(input: Operation, col_names: List[str], functions: List[str],
-          res_names: List[str]) -> 'Aggregate':
+          res_names: List[str], by: List[str]) -> 'Aggregate':
     return Aggregate.create(
         operands=[input.result],
         attributes={
@@ -606,13 +672,44 @@ class Aggregate(Operator):
                 ArrayAttr.from_list([StringAttr.from_str(c) for c in col_names]
                                    ),
             "functions":
-                ArrayAttr.from_list([StringAttr.from_str(f) for f in functions])
+                ArrayAttr.from_list([StringAttr.from_str(f) for f in functions]
+                                   ),
+            "by":
+                ArrayAttr.from_list([StringAttr.from_str(o) for o in by])
         },
         result_types=[
-            Bag.get(
-                [input.result.typ.lookup_type_in_schema(n) for n in col_names],
-                res_names)
+            Bag.get([
+                Int64() if f in ["count", "count_distinct"] else
+                input.result.typ.lookup_type_in_schema(n)
+                for n, f in zip(col_names, functions)
+            ], res_names)
         ])
+
+
+@irdl_op_definition
+class Limit(Operator):
+  """
+  Limits the number of tuples in `input` to `n` .
+
+  Example:
+
+  ```
+  %0 : ... = rel_impl.limit(...) ["n" = 10 : !i64]
+  ```
+  """
+  name = "rel_impl.limit"
+
+  input = OperandDef(Bag)
+  n = AttributeDef(IntegerAttr)
+
+  result = ResultDef(Bag)
+
+  @staticmethod
+  @builder
+  def get(table: Operation, n: int) -> 'Limit':
+    return Limit.create(operands=[table.result],
+                        attributes={"n": IntegerAttr.from_int_and_width(n, 64)},
+                        result_types=[table.result.typ])
 
 
 @dataclass
@@ -631,8 +728,12 @@ class RelImpl:
     self.ctx.register_attr(Boolean)
     self.ctx.register_attr(SchemaElement)
     self.ctx.register_attr(Tuple)
+    self.ctx.register_attr(Order)
+    self.ctx.register_attr(Float64)
 
     self.ctx.register_op(Select)
+    self.ctx.register_op(Limit)
+    self.ctx.register_op(MergeSort)
     self.ctx.register_op(Project)
     self.ctx.register_op(CartesianProduct)
     self.ctx.register_op(Aggregate)

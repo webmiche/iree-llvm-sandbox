@@ -31,6 +31,8 @@ def convert_datatype(type_: ibis.expr.datatypes) -> id.DataType:
     ret_type = id.Int32()
   elif isinstance(type_, ibis.expr.datatypes.Int64):
     ret_type = id.Int64()
+  elif isinstance(type_, ibis.expr.datatypes.Float64):
+    ret_type = id.Float64()
   elif isinstance(type_, ibis.expr.datatypes.Timestamp):
     ret_type = id.Timestamp()
   elif isinstance(type_, ibis.expr.datatypes.Decimal):
@@ -47,6 +49,9 @@ def convert_datatype(type_: ibis.expr.datatypes) -> id.DataType:
 def convert_literal(literal) -> Attribute:
   if isinstance(literal, str):
     return StringAttr.from_str(literal)
+  if isinstance(literal, float):
+    # TODO: This is a workaround until xdsl versions are released properly.
+    return IntegerAttr.from_int_and_width(int(literal), 64)
   if isinstance(literal, int):
     # np.int64 are parsed as int by ibis
     return IntegerAttr.from_int_and_width(literal, 64)
@@ -67,7 +72,15 @@ def visit_schema(schema: ibis.expr.schema.Schema) -> Region:
 def visit_ibis_expr_list(l: List[ibis.expr.types.Expr]) -> Region:
   ops = []
   for op in l:
-    ops.append(visit(op))
+    # TODO: This is a hack that rewrites top-level Ands. To do this properly,
+    # and handle all adds, first model And in ibis, then either rewrite this to
+    # a version using an optimization on the ibis dialect or model And in
+    # rel_alg and lower to that.
+    if isinstance(op.op(), ibis.expr.operations.logical.And):
+      ops.append(visit(op.op().left))
+      ops.append(visit(op.op().right))
+    else:
+      ops.append(visit(op))
   return Region.from_operation_list(ops)
 
 
@@ -82,6 +95,27 @@ def visit(  # type: ignore
   return id.Multiply.get(Region.from_operation_list([visit(op.left)]),
                          Region.from_operation_list([visit(op.right)]),
                          convert_datatype(op.output_dtype()))
+
+
+@dispatch(ibis.expr.operations.numeric.Subtract)
+def visit(op: ibis.expr.operations.numeric.Subtract):
+  return id.Subtract.get(Region.from_operation_list([visit(op.left)]),
+                         Region.from_operation_list([visit(op.right)]),
+                         convert_datatype(op.output_dtype()))
+
+
+@dispatch(ibis.expr.operations.numeric.Add)
+def visit(op: ibis.expr.operations.numeric.Add):
+  return id.Add.get(Region.from_operation_list([visit(op.left)]),
+                    Region.from_operation_list([visit(op.right)]),
+                    convert_datatype(op.output_dtype()))
+
+
+@dispatch(ibis.expr.operations.numeric.Divide)
+def visit(op: ibis.expr.operations.numeric.Divide):
+  return id.Divide.get(Region.from_operation_list([visit(op.left)]),
+                       Region.from_operation_list([visit(op.right)]),
+                       convert_datatype(op.output_dtype()))
 
 
 @dispatch(ibis.expr.operations.core.Alias)
@@ -111,8 +145,14 @@ def visit(op: ibis.expr.operations.relations.InnerJoin) -> Operation:
   if op.predicates:
     return id.Selection.get(Region.from_operation_list([cart_prod]),
                             visit_ibis_expr_list(op.predicates),
+                            Region.from_operation_list([]),
                             Region.from_operation_list([]), [])
   return cart_prod
+
+
+@dispatch(ibis.expr.operations.relations.Limit)
+def visit(op: ibis.expr.operations.relations.Limit) -> Operation:
+  return id.Limit.get(Region.from_operation_list([visit(op.table)]), op.n)
 
 
 @dispatch(ibis.expr.operations.relations.Selection)
@@ -125,7 +165,22 @@ def visit(  #type: ignore
   table = Region.from_operation_list([visit(op.table)])
   predicates = visit_ibis_expr_list(op.predicates)
   projections = visit_ibis_expr_list(op.selections)
-  return id.Selection.get(table, predicates, projections, names)
+  sort_keys = visit_ibis_expr_list(op.sort_keys)
+  return id.Selection.get(table, predicates, projections, sort_keys, names)
+
+
+@dispatch(ibis.expr.operations.logical.Between)
+def visit(op):
+  arg = Region.from_operation_list([visit(op.arg)])
+  lower_bound = Region.from_operation_list([visit(op.lower_bound)])
+  upper_bound = Region.from_operation_list([visit(op.upper_bound)])
+  return id.Between.get(arg, lower_bound, upper_bound)
+
+
+@dispatch(ibis.expr.operations.sortkeys.SortKey)
+def visit(op: ibis.expr.operations.sortkeys.SortKey) -> Operation:
+  return id.SortKey.get(Region.from_operation_list([visit(op.expr)]),
+                        op.ascending)
 
 
 @dispatch(ibis.expr.operations.relations.Aggregation)
@@ -133,10 +188,11 @@ def visit(  #type: ignore
     op: ibis.expr.operations.relations.Aggregation) -> Operation:
   table = Region.from_operation_list([visit(op.table)])
   metrics = visit_ibis_expr_list(op.metrics)
+  by = visit_ibis_expr_list(op.by)
   names = []
   if len(op.inputs) > 0:
     names = [n.get_name() for n in op.inputs[1]]
-  return id.Aggregation.get(table, metrics, names)
+  return id.Aggregation.get(table, metrics, by, names)
 
 
 @dispatch(ibis.expr.operations.generic.TableColumn)
@@ -165,6 +221,12 @@ def visit(  #type: ignore
   return create_logical_op(op, id.GreaterEqual)
 
 
+@dispatch(ibis.expr.operations.logical.Greater)
+def visit(  #type: ignore
+    op: ibis.expr.operations.logical.Greater) -> Operation:
+  return create_logical_op(op, id.GreaterThan)
+
+
 @dispatch(ibis.expr.operations.logical.LessEqual)
 def visit(  #type: ignore
     op: ibis.expr.operations.logical.LessEqual) -> Operation:
@@ -188,6 +250,41 @@ def visit(  #type: ignore
     op: ibis.expr.operations.reductions.Sum) -> Operation:
   arg = Region.from_operation_list([visit(op.arg)])
   return id.Sum.get(arg)
+
+
+@dispatch(ibis.expr.operations.reductions.Mean)
+def visit(  #type: ignore
+    op: ibis.expr.operations.reductions.Mean) -> Operation:
+  arg = Region.from_operation_list([visit(op.arg)])
+  return id.Mean.get(arg)
+
+
+@dispatch(ibis.expr.operations.reductions.Max)
+def visit(  #type: ignore
+    op: ibis.expr.operations.reductions.Max) -> Operation:
+  arg = Region.from_operation_list([visit(op.arg)])
+  return id.Max.get(arg)
+
+
+@dispatch(ibis.expr.operations.reductions.Min)
+def visit(  #type: ignore
+    op: ibis.expr.operations.reductions.Min) -> Operation:
+  arg = Region.from_operation_list([visit(op.arg)])
+  return id.Min.get(arg)
+
+
+@dispatch(ibis.expr.operations.reductions.Count)
+def visit(  #type: ignore
+    op: ibis.expr.operations.reductions.Count) -> Operation:
+  arg = Region.from_operation_list([visit(op.arg)])
+  return id.Count.get(arg)
+
+
+@dispatch(ibis.expr.operations.reductions.CountDistinct)
+def visit(  #type: ignore
+    op: ibis.expr.operations.reductions.CountDistinct) -> Operation:
+  arg = Region.from_operation_list([visit(op.arg)])
+  return id.CountDistinct.get(arg)
 
 
 def ibis_to_xdsl(ctx: MLContext, query: ibis.expr.types.Expr) -> ModuleOp:

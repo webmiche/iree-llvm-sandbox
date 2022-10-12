@@ -28,6 +28,8 @@ class RelSSARewriter(RewritePattern):
       return RelImpl.Int32()
     if isinstance(type_, RelSSA.Int64):
       return RelImpl.Int64()
+    if isinstance(type_, RelSSA.Float64):
+      return RelImpl.Float64()
     if isinstance(type_, RelSSA.Decimal):
       return RelImpl.Decimal([
           IntegerAttr.from_int_and_width(type_.prec.value.data,
@@ -141,6 +143,16 @@ class YieldValueRewriter(RelSSARewriter):
 
 
 @dataclass
+class OrderByRewriter(RelSSARewriter):
+
+  @op_type_rewrite_pattern
+  def match_and_rewrite(self, op: RelSSA.OrderBy, rewriter: PatternRewriter):
+    rewriter.replace_matched_op(
+        RelImpl.MergeSort.get(op.input.op, [o.col.data for o in op.by.data],
+                              [o.order.data for o in op.by.data]))
+
+
+@dataclass
 class ProjectRewriter(RelSSARewriter):
 
   @op_type_rewrite_pattern
@@ -202,7 +214,16 @@ class AggregateRewriter(RelSSARewriter):
         RelImpl.Aggregate.get(
             op.input.op, [c.data for c in op.col_names.data],
             [f.data for f in op.functions.data],
-            [s.elt_name.data for s in op.result.typ.schema.data]))
+            [s.elt_name.data for s in op.result.typ.schema.data],
+            [o.data for o in op.by.data]))
+
+
+@dataclass
+class LimitRewriter(RelSSARewriter):
+
+  @op_type_rewrite_pattern
+  def match_and_rewrite(self, op: RelSSA.Limit, rewriter: PatternRewriter):
+    rewriter.replace_matched_op(RelImpl.Limit.get(op.input.op, op.n.value.data))
 
 
 #===------------------------------------------------------------------------===#
@@ -224,6 +245,8 @@ def ssa_to_impl(ctx: MLContext, query: ModuleOp):
       ProjectRewriter(),
       AndRewriter(),
       CartesianProductRewriter(),
+      OrderByRewriter(),
+      LimitRewriter(),
       BinOpRewriter()
   ]),
                                 walk_regions_first=False,
