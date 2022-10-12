@@ -26,7 +26,7 @@ from decimal import Decimal
 import time
 
 
-def compile(query, mlir_ctx):
+def compile(query):
   ctx = MLContext()
   mod = ibis_to_xdsl(ctx, query)
   ibis_to_alg(ctx, mod)
@@ -37,8 +37,7 @@ def compile(query, mlir_ctx):
   data = impl_to_iterators(ctx, mod)
 
   converter = IteratorsMLIRConverter(ctx)
-  return [data[0].split(',')[1:]
-         ], converter.convert_module_with_ctx(mod, mlir_ctx)
+  return [data[0].split(',')[1:]], converter.convert_module(mod)
 
 
 def run(query, df: pd.DataFrame):
@@ -46,12 +45,14 @@ def run(query, df: pd.DataFrame):
   with Context() as mlir_ctx:
     it.register_dialect()
     start = time.time()
-    data, mlir_module = compile(query, mlir_ctx)
+    data, mlir_module = compile(query)
     print("compilation time: " + str(time.time() - start))
 
     arg = ctypes.pointer(to_partial_columnar_batch_descriptor(df, data[0]))
+    mlir_string = str(mlir_module)
+    mod = Module.parse(mlir_string)
     start = time.time()
-    ie.run(mlir_module, [arg])
+    ie.run(mod, [arg])
     print("runtime: " + str(time.time() - start))
 
 
