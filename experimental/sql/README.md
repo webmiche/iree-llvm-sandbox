@@ -16,6 +16,20 @@ To get the exact times, change the `CYCLES_PER_SECOND` in
 `experimental/sql/tools/load.c` and `experimental/sql/duckdb_run/run_duckdb.cpp`
 to the speed of your processor.
 
+### Generating the Data:
+
+The data needed to benchmark both the execution of DuckDB and our approach is
+the lineitem table in scale factors 1, 2, 4, 8, and 16 generated as integer data
+(available [here](https://gitlab.inf.ethz.ch/OU-SYSTEMS/projects/cvm/dbgen), if
+you do not have access to the repository, feel free to reach out to me using
+`michel.web97@gmail.com`). The tables need to be placed in the directory
+`experimental/sql/tables` in both a `.tbl` and a `.csv` version.
+
+Notice both `experimental/sql/tools/gen_factors.sh`, a shell script to generate
+the tables and `experimental/sql/tools/convert_tbl.py`, a python script to
+convert `.tbl` to `.csv` files. Notice that you might have to change the paths
+in the later.
+
 ### Generating the DuckDB data:
 
 Compile the runner, linking it against the DuckDB library files. Then adjust the
@@ -29,7 +43,8 @@ export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:*/path/to*/iree-llvm-sandbox/experimenta
 
 ### Generating the data for our approach:
 
-To run our approach, we first compile the input query through our compilation stack printing it to `tmp.mlir`.
+To run our approach, we first compile the input query through our compilation
+stack printing it to `tmp.mlir`.
 
 ```Bash
 ./experimental/sql/tools/rel_opt.py -f ibis -p ibis-to-alg,projection-pushdown,alg-to-ssa,ssa-to-impl,fuse-proj-into-scan,impl-to-iterators -t llvm experimental/sql/TPCH/q6.ibis > tmp.mlir
@@ -77,8 +92,8 @@ python3 experimental/sql/TPCH/get_features.py > experimental/sql/data/ibis_nodes
 python3 experimental/sql/TPCH/get_accessed_cols.py > experimental/sql/data/partial_loading.txt
 ```
 
-Similarly to above, change the directory to `experimental/sql/plots` and run
-the script to generate the plot:
+Similarly to above, change the directory to `experimental/sql/plots` and run the
+script to generate the plot:
 
 ```Bash
 cd experimental/sql/plots
@@ -86,4 +101,5 @@ python3 ibis_nodes.py
 python3 partial_loading.py
 ```
 
-Your generated plots are `experimental/sql/plots/ibis_nodes.pdf` and `experimental/sql/plors/partial_loading.pdf` respectively.
+Your generated plots are `experimental/sql/plots/ibis_nodes.pdf` and
+`experimental/sql/plors/partial_loading.pdf` respectively.
