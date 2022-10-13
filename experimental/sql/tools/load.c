@@ -8,6 +8,7 @@
 #define NR 32
 #define CYCLES_REQUIRED 1e10
 #define REP 1
+#define CYCLES_PER_SECOND 2.3e9
 
 extern void query(int64_t, int64_t *, int64_t *, int64_t *, int64_t *);
 
@@ -54,7 +55,7 @@ int benchmark(int64_t scale_factor) {
     break;
   }
   char filename[48];
-  snprintf(filename, 48, "/home/michel/MasterThesis/dbgen/lineitem_%ld.tbl",
+  snprintf(filename, 48, "./experimental/sql/tables/lineitem_%ld.tbl",
            scale_factor);
   fp = fopen(filename, "r");
   if (fp == NULL)
@@ -111,7 +112,7 @@ int benchmark(int64_t scale_factor) {
       start = start_tsc();
       query(row_count, shipdate, discount, quantity, extendedprice);
       end = stop_tsc(start);
-      fprintf(stderr, "%lf\n", ((double)end) / 2.3e9);
+      fprintf(stderr, "%lf\n", ((double)end) / CYCLES_PER_SECOND);
     }
 
     cycles = ((double)end) / num_runs;

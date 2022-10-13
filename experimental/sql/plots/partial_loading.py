@@ -17,18 +17,18 @@ matplotlib.rcParams['figure.figsize'] = 5, 3
 
 
 def parse_data(f: str):
-    with open(f, "r") as f:
-        counts = []
-        curr_count = 0
-        for line in f:
-            l = line.strip()
-            if l.isnumeric():
-                counts.append(curr_count)
-                curr_count = 0
-            else:
-                curr_count += 1
+  with open(f, "r") as f:
+    counts = []
+    curr_count = 0
+    for line in f:
+      l = line.strip()
+      if l.isnumeric():
         counts.append(curr_count)
-        return counts[1:]
+        curr_count = 0
+      else:
+        curr_count += 1
+    counts.append(curr_count)
+    return counts[1:]
 
 
 column_counts = {
@@ -113,17 +113,17 @@ ax.spines['top'].set_visible(False)
 
 
 def autolabel(rects):
-    """Attach a text label above each bar in *rects*, displaying its height."""
-    for rect in rects:
-        height = rect.get_height()
-        ax.annotate(
-            '{}'.format(height),
-            xy=(rect.get_x() + rect.get_width() / 2, height),
-            xytext=(0, 1),  # 1 points vertical offset
-            textcoords="offset points",
-            fontsize="smaller",
-            ha='center',
-            va='bottom')
+  """Attach a text label above each bar in *rects*, displaying its height."""
+  for rect in rects:
+    height = rect.get_height()
+    ax.annotate(
+        '{}'.format(height),
+        xy=(rect.get_x() + rect.get_width() / 2, height),
+        xytext=(0, 1),  # 1 points vertical offset
+        textcoords="offset points",
+        fontsize="smaller",
+        ha='center',
+        va='bottom')
 
 
 ax.set_xlabel('Query of the TPC-H benchmark')
@@ -135,7 +135,7 @@ autolabel(rects3)
 ax.legend(ncol=2,
           frameon=False,
           loc='lower right',
-          bbox_to_anchor=(0, 0.9, 0.85, 0))
+          bbox_to_anchor=(0, 0.9, 0.9, 0))
 
 fig.tight_layout()
 
