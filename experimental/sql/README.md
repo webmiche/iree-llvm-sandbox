@@ -1,5 +1,15 @@
 # Prototype SQL dialect(s)
 
+## Getting the code:
+
+Get the code by cloning out github repository. Make sure to take the proper
+branch (`zenodo_artifact`).
+
+```Bash
+git clone https://github.com/webmiche/iree-llvm-sandbox/tree/zenodo_artifact
+cd iree-llvm-sandbos
+```
+
 ## Preamble:
 
 For this README, we refer to the directory where the sandbox was cloned into as
