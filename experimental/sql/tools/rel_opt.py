@@ -25,6 +25,7 @@ from dialects.rel_alg import RelationalAlg
 from dialects.rel_ssa import RelSSA
 from dialects.rel_impl import RelImpl
 from dialects.iterators import Iterators
+from dialects.stream import Streamer
 
 
 class RelOptMain(xDSLOptMain):
@@ -79,6 +80,7 @@ class RelOptMain(xDSLOptMain):
     rel_ssa = RelSSA(self.ctx)
     rel_impl = RelImpl(self.ctx)
     dataflow = Iterators(self.ctx)
+    streamer = Streamer(self.ctx)
 
   def register_all_targets(self):
     super().register_all_targets()
@@ -89,7 +91,7 @@ class RelOptMain(xDSLOptMain):
       print(mlir_module, file=output)
 
     if mlir_loaded:
-      self.available_targets['mlir'] = _output_mlir
+      self.available_targets['mlir_iterators'] = _output_mlir
 
 
 def __main__():
