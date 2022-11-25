@@ -6,7 +6,10 @@ from dataclasses import dataclass
 from typing import Any, Union, List
 from xdsl.ir import Block, Region, Operation, SSAValue, ParametrizedAttribute, Data, MLContext, Attribute
 from xdsl.dialects.builtin import StringAttr, ArrayAttr, ArrayOfConstraint, IntegerAttr, IntegerType, TupleType, FlatSymbolRefAttr
-from xdsl.irdl import AttributeDef, OperandDef, ResultDef, RegionDef, SingleBlockRegionDef, irdl_attr_definition, irdl_op_definition, ParameterDef, AnyAttr, VarOperandDef, builder
+from xdsl.irdl import (AttributeDef, OperandDef, ResultDef, RegionDef,
+                       SingleBlockRegionDef, irdl_attr_definition,
+                       irdl_op_definition, ParameterDef, AnyAttr, VarOperandDef,
+                       builder, VarResultDef)
 
 #===------------------------------------------------------------------------===#
 # Data types
@@ -58,12 +61,12 @@ class UnpackOp(Operation):
   name = "stream.unpack"
 
   input = OperandDef(TupleType)
-  res = ResultDef(AnyAttr())
+  res = VarResultDef(AnyAttr())
 
   @builder
   @staticmethod
   def get(input: SSAValue) -> 'UnpackOp':
-    return UnpackOp.build(operands=[input], result_types=input.typ.types.data)
+    return UnpackOp.build(operands=[input], result_types=[input.typ.types.data])
 
 
 @irdl_op_definition

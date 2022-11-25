@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 from dataclasses import dataclass
-from xdsl.ir import Operation, MLContext, Region, Block, Attribute
+from xdsl.ir import Operation, MLContext, Region, Block, Attribute, SSAValue
 from typing import List, Type, Optional, Tuple
 from xdsl.dialects.builtin import ArrayAttr, StringAttr, ModuleOp, IntegerAttr, IntegerType, TupleType, UnitAttr
 from xdsl.dialects.llvm import LLVMStructType, LLVMExtractValue, LLVMInsertValue, LLVMMLIRUndef
@@ -109,11 +109,7 @@ class IndexByNameRewriter(StreamRewriter):
   @op_type_rewrite_pattern
   def match_and_rewrite(self, op: RelImpl.IndexByName,
                         rewriter: PatternRewriter):
-    # TODO: handle tuple with multiple elements
-    if len(op.result.uses) == 0:
-      rewriter.erase_matched_op()
-    else:
-      rewriter.replace_matched_op(Stream.UnpackOp.get(op.tuple))
+    rewriter.erase_matched_op()
 
 
 @dataclass
@@ -124,8 +120,14 @@ class ToTupleConverter(StreamRewriter):
     if len(op.regions) == 0:
       return
     block = op.regions[0].blocks[0]
+    names = [s.elt_name.data for s in block.args[0].typ.schema.data]
     rewriter.modify_block_argument_type(block.args[0],
                                         convert_tuple(block.args[0].typ))
+    block.insert_op(s := Stream.UnpackOp.get(block.args[0]), 0)
+    tuple_mapping: dict[str, SSAValue] = dict(zip(names, s.results))
+    for o in block.ops:
+      if isinstance(o, RelImpl.IndexByName):
+        o.results[0].replace_by(tuple_mapping[o.col_name.data])
 
 
 @dataclass
