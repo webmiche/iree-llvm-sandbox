@@ -208,9 +208,8 @@ class FullTableScanRewriter(StreamRewriter):
   @op_type_rewrite_pattern
   def match_and_rewrite(self, op: RelImpl.FullTableScanOp,
                         rewriter: PatternRewriter):
-    for use in op.results[0].uses.copy():
-      use.operation.replace_operand(use.index,
-                                    self.table_mapping[op.table_name.data])
+
+    op.result.replace_by(self.table_mapping[op.table_name.data])
     rewriter.erase_matched_op()
 
 
