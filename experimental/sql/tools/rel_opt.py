@@ -18,6 +18,7 @@ from src.ibis_to_alg import ibis_to_alg
 from src.alg_to_ssa import alg_to_ssa
 from src.ssa_to_impl import ssa_to_impl
 from src.impl_to_iterators import impl_to_iterators
+from src.impl_to_stream import impl_to_stream
 from src.projection_pushdown import projection_pushdown
 from src.fuse_proj_into_scan import fuse_proj_into_scan
 from dialects.ibis_dialect import Ibis
@@ -35,6 +36,7 @@ class RelOptMain(xDSLOptMain):
     self.available_passes['alg-to-ssa'] = alg_to_ssa
     self.available_passes['ssa-to-impl'] = ssa_to_impl
     self.available_passes['impl-to-iterators'] = impl_to_iterators
+    self.available_passes['impl-to-stream'] = impl_to_stream
     self.available_passes['projection-pushdown'] = projection_pushdown
     self.available_passes['fuse-proj-into-scan'] = fuse_proj_into_scan
 

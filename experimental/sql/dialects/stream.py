@@ -24,7 +24,7 @@ class Stream(ParametrizedAttribute):
   """
   name = "stream.stream"
 
-  types: ParameterDef[Attribute]
+  type: ParameterDef[Attribute]
 
   @builder
   @staticmethod
@@ -54,6 +54,34 @@ class MapOp(Operation):
 
 
 @irdl_op_definition
+class UnpackOp(Operation):
+  name = "stream.unpack"
+
+  input = OperandDef(TupleType)
+  res = ResultDef(AnyAttr())
+
+  @builder
+  @staticmethod
+  def get(input: SSAValue) -> 'UnpackOp':
+    return UnpackOp.build(operands=[input], result_types=input.typ.types.data)
+
+
+@irdl_op_definition
+class PackOp(Operation):
+  name = "stream.pack"
+
+  inputs = VarOperandDef(AnyAttr())
+  res = ResultDef(TupleType)
+
+  @builder
+  @staticmethod
+  def get(inputs: List[SSAValue]) -> 'PackOp':
+    return PackOp.build(
+        operands=[inputs],
+        result_types=[TupleType.from_type_list([e.typ for e in inputs])])
+
+
+@irdl_op_definition
 class YieldOp(Operation):
   name = "stream.yield"
 
@@ -62,7 +90,7 @@ class YieldOp(Operation):
   @builder
   @staticmethod
   def get(ops: list[Operation]) -> 'YieldOp':
-    YieldOp.build(operands=ops)
+    return YieldOp.build(operands=[ops])
 
 
 @dataclass
@@ -73,4 +101,7 @@ class Streamer:
     self.ctx.register_attr(Stream)
 
     self.ctx.register_op(MapOp)
+
+    self.ctx.register_op(UnpackOp)
+    self.ctx.register_op(PackOp)
     self.ctx.register_op(YieldOp)
